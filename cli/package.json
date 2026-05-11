@@ -1,10 +1,11 @@
 {
-  "name": "tui",
+  "name": "switchboard",
   "module": "src/index.tsx",
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "bun run --watch src/index.tsx"
+    "dev": "bun run --watch src/index.tsx",
+    "build:debug": "bun build ./src/index.tsx --compile --outfile ./dist/debug/switchboard  --sourcemap"
   },
   "devDependencies": {
     "@types/bun": "latest"
