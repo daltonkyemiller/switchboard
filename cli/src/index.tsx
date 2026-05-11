@@ -1,6 +1,10 @@
+import { runAttach } from "./commands/attach.ts";
 import { runDaemon } from "./commands/daemon.ts";
+import { runGrammar } from "./commands/grammar.ts";
 import { runIntegration } from "./commands/integration.ts";
 import { runList } from "./commands/list.ts";
+import { runNew } from "./commands/new.ts";
+import { runPick } from "./commands/pick.tsx";
 import { runRelease, runReport } from "./commands/report.ts";
 import { runSidebar } from "./commands/sidebar.tsx";
 import { runWatch } from "./commands/watch.ts";
@@ -11,6 +15,10 @@ function printUsage(): void {
 usage:
   switchboard daemon                                run the background server
   switchboard sidebar [--cwd PATH | --all]          tui sidebar (default: cwd of this pane)
+  switchboard new <tool> [--detach] [args...]       spawn agent in a detached tmux session
+  switchboard attach <session>                      open a viewer pane that attaches to an agent
+  switchboard pick [--target PANE] [--cwd PATH]     file/content picker; inserts @path into target
+  switchboard grammar list|add                      manage picker Tree-sitter grammars
   switchboard list [--cwd PATH]                     list tracked agents
   switchboard watch                                 stream agent events
   switchboard integration install <claude|codex|opencode>   install agent hook
@@ -39,6 +47,18 @@ async function main(): Promise<void> {
       return;
     case "integration":
       await runIntegration(rest);
+      return;
+    case "grammar":
+      await runGrammar(rest);
+      return;
+    case "new":
+      await runNew(rest);
+      return;
+    case "attach":
+      await runAttach(rest);
+      return;
+    case "pick":
+      await runPick(rest);
       return;
     case "report":
       await runReport(rest);

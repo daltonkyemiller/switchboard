@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useKeyboard, useRenderer } from "@opentui/react";
+import { attachAgentSession } from "../commands/attach.ts";
+import { createAgentSession } from "../commands/new.ts";
 import { connect, type Client } from "../shared/client.ts";
 import type { Event } from "../shared/protocol.ts";
 import type { AgentState, AgentStatus } from "../shared/state.ts";
@@ -105,6 +107,17 @@ export function SidebarApp({ filterCwd }: SidebarProps) {
       if (selected) focusPane(selected);
       return;
     }
+    if (key.name === "a") {
+      const selected = visible[safeIndex];
+      if (selected?.session) {
+        void attachAgentSession({ target: selected.session }).catch(() => {});
+      }
+      return;
+    }
+    if (key.name === "n") {
+      void createAgentSession({ tool: "claude" }).catch(() => {});
+      return;
+    }
   });
 
   useEffect(() => {
@@ -160,7 +173,7 @@ export function SidebarApp({ filterCwd }: SidebarProps) {
           ))
         )}
       </box>
-      <text fg="#665c54">j/k move · enter focus · q quit</text>
+      <text fg="#665c54">j/k · enter reveal · a attach · n new · q quit</text>
     </box>
   );
 }
@@ -188,20 +201,49 @@ function AgentRow({
   readonly agent: AgentState;
   readonly selected: boolean;
 }) {
-  const preview = agent.promptPreview ?? "";
   const location =
     agent.session && agent.windowIndex >= 0 ? `${agent.session}:${agent.windowIndex}` : "";
-  const pointer = selected ? "▶" : " ";
-  const pointerColor = selected ? "#fabd2f" : "#3c3836";
+  const preview = agent.promptPreview ?? "";
+  const pointer = selected ? "▍" : " ";
+  const pointerColor = selected ? STATUS_COLOR[agent.status] : "#3c3836";
   const nameColor = selected ? "#ebdbb2" : "#a89984";
+  const statusColor = STATUS_COLOR[agent.status];
+  const background = selected ? "#3c3836" : "#1d2021";
+
   return (
-    <box style={{ flexDirection: "row", gap: 1 }}>
-      <text fg={pointerColor}>{pointer}</text>
-      <text fg={STATUS_COLOR[agent.status]}>{STATUS_GLYPH[agent.status]}</text>
-      <text fg={nameColor}>{agent.tool}</text>
-      <text fg="#928374">{agent.status}</text>
-      {location ? <text fg="#665c54">{location}</text> : null}
-      {preview ? <text fg="#7c6f64">{preview}</text> : null}
+    <box
+      style={{
+        flexDirection: "column",
+        marginBottom: 1,
+        paddingTop: 0,
+        paddingBottom: 0,
+        paddingLeft: 1,
+        paddingRight: 1,
+        width: "100%",
+        backgroundColor: background,
+      }}
+    >
+      <box style={{ flexDirection: "row" }}>
+        <text fg={pointerColor}>{pointer} </text>
+        <text fg={statusColor}>{STATUS_GLYPH[agent.status]} </text>
+        <text fg={nameColor}>{agent.tool} </text>
+        <text fg="#928374">{agent.status}</text>
+      </box>
+      {location ? (
+        <box style={{ flexDirection: "row", paddingLeft: 4 }}>
+          <text fg="#665c54">{location}</text>
+        </box>
+      ) : null}
+      {preview ? (
+        <box style={{ flexDirection: "row", paddingLeft: 4 }}>
+          <text fg="#7c6f64">{truncate(preview, 60)}</text>
+        </box>
+      ) : null}
     </box>
   );
+}
+
+function truncate(value: string, max: number): string {
+  if (value.length <= max) return value;
+  return `${value.slice(0, max - 1)}…`;
 }

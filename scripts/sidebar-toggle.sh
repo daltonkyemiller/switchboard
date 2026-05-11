@@ -16,5 +16,6 @@ if [[ -n "$existing" ]]; then
   exit 0
 fi
 
-new_pane=$(tmux split-window -fhb -l "$width" -P -F '#{pane_id}' "$command_line")
+new_pane=$(tmux split-window -fhb -l "$width" -P -F '#{pane_id}' \
+  -e "OPENTUI_GRAPHICS=false" "$command_line")
 tmux set-option -p -t "$new_pane" -q '@switchboard_role' 'sidebar'
