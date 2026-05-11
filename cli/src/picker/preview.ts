@@ -8,6 +8,7 @@ export type PreviewContent = {
   readonly text: string;
   readonly filetype: string | null;
   readonly truncated: boolean;
+  readonly isPartial: boolean;
 };
 
 export async function loadPreview(absPath: string): Promise<PreviewContent | null> {
@@ -24,10 +25,10 @@ export async function loadPreview(absPath: string): Promise<PreviewContent | nul
       } finally {
         await fd.close();
       }
-      return { text: buffer.toString("utf8"), filetype: lang, truncated: true };
+      return { text: buffer.toString("utf8"), filetype: lang, truncated: true, isPartial: true };
     }
     const text = await readFile(absPath, "utf8");
-    return { text, filetype: lang, truncated: false };
+    return { text, filetype: lang, truncated: false, isPartial: false };
   } catch {
     return null;
   }

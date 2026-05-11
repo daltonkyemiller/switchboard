@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useKeyboard, useRenderer } from "@opentui/react";
-import { RGBA, SyntaxStyle, type TreeSitterClient } from "@opentui/core";
+import { type ScrollBoxRenderable, type TreeSitterClient } from "@opentui/core";
 import { createFinder, type Hit } from "./finder.ts";
 import { getHighlighter } from "./highlighter.ts";
 import { buildAbsPath, loadPreview, sliceAround, type PreviewContent } from "./preview.ts";
+import type { PickerTheme } from "./theme.ts";
 import { pasteToPane, resolveAgentPane } from "./tmux.ts";
 
 type Mode = "files" | "content";
@@ -12,31 +13,13 @@ type PickerProps = {
   readonly cwd: string;
   readonly targetPane: string | null;
   readonly initialQuery?: string;
+  readonly theme: PickerTheme;
 };
 
-const DIM_FG = "#665c54";
-const PROMPT_FG = "#fabd2f";
-const ITEM_FG = "#a89984";
-const SELECTED_FG = "#ebdbb2";
-const SELECTED_BG = "#3c3836";
-const PATH_FG = "#7c6f64";
-const ACCENT = "#83a598";
-const PANEL_BG = "#1d2021";
-
-const syntaxStyle = SyntaxStyle.fromStyles({
-  keyword: { fg: RGBA.fromHex("#fb4934"), bold: true },
-  string: { fg: RGBA.fromHex("#b8bb26") },
-  comment: { fg: RGBA.fromHex("#665c54"), italic: true },
-  number: { fg: RGBA.fromHex("#d3869b") },
-  function: { fg: RGBA.fromHex("#8ec07c") },
-  type: { fg: RGBA.fromHex("#fabd2f") },
-  property: { fg: RGBA.fromHex("#83a598") },
-  default: { fg: RGBA.fromHex("#ebdbb2") },
-});
-
-export function PickerApp({ cwd, targetPane, initialQuery = "" }: PickerProps) {
+export function PickerApp({ cwd, targetPane, initialQuery = "", theme }: PickerProps) {
   const renderer = useRenderer();
   const finderRef = useRef(createFinder(cwd));
+  const resultsRef = useRef<ScrollBoxRenderable | null>(null);
   const [mode, setMode] = useState<Mode>("files");
   const [query, setQuery] = useState(initialQuery);
   const [hits, setHits] = useState<readonly Hit[]>([]);
@@ -96,8 +79,12 @@ export function PickerApp({ cwd, targetPane, initialQuery = "" }: PickerProps) {
         return;
       }
       const lineNumber = hit.kind === "content" ? hit.lineNumber : 0;
-      const slice = lineNumber > 0 ? sliceAround(content.text, lineNumber, 30) : { text: content.text, startLine: 1 };
-      setPreview({ content: { ...content, text: slice.text }, startLine: slice.startLine });
+      const slice =
+        lineNumber > 0 ? sliceAround(content.text, lineNumber, 30) : { text: content.text, startLine: 1 };
+      setPreview({
+        content: { ...content, text: slice.text, isPartial: content.isPartial || lineNumber > 0 },
+        startLine: slice.startLine,
+      });
     };
     void load();
     return () => {
@@ -159,31 +146,38 @@ export function PickerApp({ cwd, targetPane, initialQuery = "" }: PickerProps) {
   const visible = useMemo(() => hits.slice(0, 200), [hits]);
   const visibleSelected = Math.min(selected, Math.max(visible.length - 1, 0));
 
+  useEffect(() => {
+    resultsRef.current?.scrollChildIntoView(resultRowId(visibleSelected));
+  }, [visibleSelected, visible]);
+
   return (
     <box style={{ flexDirection: "column", padding: 1, flexGrow: 1 }}>
-      <Prompt mode={mode} query={query} searching={searching} hitCount={hits.length} />
+      <Prompt mode={mode} query={query} searching={searching} hitCount={hits.length} theme={theme} />
       <box style={{ flexDirection: "row", marginTop: 1, flexGrow: 1, gap: 1 }}>
-        <box style={{ flexDirection: "column", width: "45%", flexShrink: 0 }}>
+        <scrollbox
+          ref={resultsRef}
+          scrollY={true}
+          scrollX={false}
+          viewportCulling={true}
+          style={{ flexDirection: "column", width: "45%", flexShrink: 0 }}
+        >
           {visible.length === 0 ? (
-            <text fg={DIM_FG}>{searching ? "searching…" : "no matches"}</text>
+            <text fg={theme.colors.dimFg}>{searching ? "searching…" : "no matches"}</text>
           ) : (
-            visible
-              .slice(Math.max(0, visibleSelected - 10), Math.max(0, visibleSelected - 10) + 30)
-              .map((hit, i) => {
-                const actualIndex = i + Math.max(0, visibleSelected - 10);
-                return (
-                  <Row
-                    key={rowKey(hit, actualIndex)}
-                    hit={hit}
-                    selected={actualIndex === visibleSelected}
-                  />
-                );
-              })
+            visible.map((hit, index) => (
+              <Row
+                key={rowKey(hit, index)}
+                id={resultRowId(index)}
+                hit={hit}
+                selected={index === visibleSelected}
+                theme={theme}
+              />
+            ))
           )}
-        </box>
-        <Preview preview={preview} highlighter={highlighter} />
+        </scrollbox>
+        <Preview preview={preview} highlighter={highlighter} theme={theme} />
       </box>
-      <text fg={DIM_FG}>↵ insert · ⇥ {mode === "files" ? "→ content" : "→ files"} · esc cancel</text>
+      <text fg={theme.colors.dimFg}>↵ insert · ⇥ {mode === "files" ? "→ content" : "→ files"} · esc cancel</text>
     </box>
   );
 }
@@ -193,33 +187,46 @@ function Prompt({
   query,
   searching,
   hitCount,
+  theme,
 }: {
   readonly mode: Mode;
   readonly query: string;
   readonly searching: boolean;
   readonly hitCount: number;
+  readonly theme: PickerTheme;
 }) {
   return (
     <box style={{ flexDirection: "row" }}>
-      <text fg={ACCENT}>{mode === "files" ? "files" : "grep "} </text>
-      <text fg={PROMPT_FG}>❯ </text>
-      <text fg={SELECTED_FG}>{query}</text>
-      <text fg={DIM_FG}>▏</text>
-      <text fg={DIM_FG}>  {searching ? "…" : `${hitCount}`}</text>
+      <text fg={theme.colors.accent}>{mode === "files" ? "files" : "grep "} </text>
+      <text fg={theme.colors.promptFg}>❯ </text>
+      <text fg={theme.colors.selectedFg}>{query}</text>
+      <text fg={theme.colors.dimFg}>▏</text>
+      <text fg={theme.colors.dimFg}>  {searching ? "…" : `${hitCount}`}</text>
     </box>
   );
 }
 
-function Row({ hit, selected }: { readonly hit: Hit; readonly selected: boolean }) {
+function Row({
+  id,
+  hit,
+  selected,
+  theme,
+}: {
+  readonly id: string;
+  readonly hit: Hit;
+  readonly selected: boolean;
+  readonly theme: PickerTheme;
+}) {
   const pointer = selected ? "▍" : " ";
-  const pointerColor = selected ? ACCENT : "#3c3836";
-  const bg = selected ? SELECTED_BG : undefined;
-  const nameColor = selected ? SELECTED_FG : ITEM_FG;
+  const pointerColor = selected ? theme.colors.accent : theme.colors.selectedBg;
+  const bg = selected ? theme.colors.selectedBg : undefined;
+  const nameColor = selected ? theme.colors.selectedFg : theme.colors.itemFg;
 
   if (hit.kind === "file") {
     const dir = hit.path.slice(0, hit.path.length - hit.fileName.length);
     return (
       <box
+        id={id}
         style={{
           flexDirection: "row",
           paddingLeft: 1,
@@ -229,7 +236,7 @@ function Row({ hit, selected }: { readonly hit: Hit; readonly selected: boolean 
         }}
       >
         <text fg={pointerColor}>{pointer} </text>
-        <text fg={PATH_FG}>{dir}</text>
+        <text fg={theme.colors.pathFg}>{dir}</text>
         <text fg={nameColor}>{hit.fileName}</text>
       </box>
     );
@@ -237,6 +244,7 @@ function Row({ hit, selected }: { readonly hit: Hit; readonly selected: boolean 
 
   return (
     <box
+      id={id}
       style={{
         flexDirection: "column",
         paddingLeft: 1,
@@ -248,10 +256,10 @@ function Row({ hit, selected }: { readonly hit: Hit; readonly selected: boolean 
       <box style={{ flexDirection: "row" }}>
         <text fg={pointerColor}>{pointer} </text>
         <text fg={nameColor}>{hit.fileName}</text>
-        <text fg={DIM_FG}>:{hit.lineNumber}</text>
+        <text fg={theme.colors.dimFg}>:{hit.lineNumber}</text>
       </box>
       <box style={{ flexDirection: "row", paddingLeft: 4 }}>
-        <text fg={DIM_FG}>{hit.line.slice(0, 200)}</text>
+        <text fg={theme.colors.dimFg}>{hit.line.slice(0, 200)}</text>
       </box>
     </box>
   );
@@ -260,10 +268,15 @@ function Row({ hit, selected }: { readonly hit: Hit; readonly selected: boolean 
 function Preview({
   preview,
   highlighter,
+  theme,
 }: {
   readonly preview: { content: PreviewContent; startLine: number } | null;
   readonly highlighter: TreeSitterClient | null;
+  readonly theme: PickerTheme;
 }) {
+  const shouldRenderMarkdown =
+    preview?.content.filetype === "markdown" && !preview.content.isPartial;
+
   return (
     <box
       style={{
@@ -273,22 +286,28 @@ function Preview({
         paddingRight: 1,
         paddingTop: 0,
         paddingBottom: 0,
-        backgroundColor: PANEL_BG,
+        backgroundColor: theme.colors.panelBg,
       }}
     >
       {preview ? (
-        preview.content.filetype && highlighter ? (
+        shouldRenderMarkdown ? (
+          <markdown
+            content={preview.content.text}
+            syntaxStyle={theme.syntaxStyle}
+            treeSitterClient={highlighter ?? undefined}
+          />
+        ) : preview.content.filetype && highlighter ? (
           <code
             content={preview.content.text}
             filetype={preview.content.filetype}
-            syntaxStyle={syntaxStyle}
+            syntaxStyle={theme.syntaxStyle}
             treeSitterClient={highlighter}
           />
         ) : (
-          <text fg={ITEM_FG}>{preview.content.text}</text>
+          <text fg={theme.colors.itemFg}>{preview.content.text}</text>
         )
       ) : (
-        <text fg={DIM_FG}>no preview</text>
+        <text fg={theme.colors.dimFg}>no preview</text>
       )}
     </box>
   );
@@ -297,6 +316,10 @@ function Preview({
 function rowKey(hit: Hit, index: number): string {
   if (hit.kind === "content") return `${hit.path}:${hit.lineNumber}:${index}`;
   return `${hit.path}:${index}`;
+}
+
+function resultRowId(index: number): string {
+  return `picker-result-${index}`;
 }
 
 function formatInsertion(hit: Hit): string {
