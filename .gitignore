@@ -1,0 +1,8 @@
+node_modules
+
+.agents
+!.agents/skills/opentui
+
+.claude
+!.claude/skills/opentui
+
