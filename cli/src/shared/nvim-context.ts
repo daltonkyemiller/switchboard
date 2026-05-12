@@ -14,7 +14,10 @@ type NvimContextJson = {
 
 export type NvimPickerContext = {
   readonly priorities: ReadonlyMap<string, number>;
+  readonly sources: ReadonlyMap<string, NvimContextSource>;
 };
+
+export type NvimContextSource = "current" | "alternate" | "buffer" | "recent";
 
 function contextFile(cwd: string): string {
   const hash = createHash("sha256").update(cwd).digest("hex").slice(0, 16);
@@ -42,10 +45,19 @@ function relativeFile(cwd: string, file: string | null): string | null {
   return rel;
 }
 
-function addPriority(priorities: Map<string, number>, path: string | null, score: number): void {
+function addPriority(
+  priorities: Map<string, number>,
+  sources: Map<string, NvimContextSource>,
+  path: string | null,
+  score: number,
+  source: NvimContextSource,
+): void {
   if (!path) return;
   const existing = priorities.get(path) ?? 0;
-  if (score > existing) priorities.set(path, score);
+  if (score > existing) {
+    priorities.set(path, score);
+    sources.set(path, source);
+  }
 }
 
 export async function loadNvimPickerContext(cwd: string): Promise<NvimPickerContext | null> {
@@ -62,15 +74,16 @@ export async function loadNvimPickerContext(cwd: string): Promise<NvimPickerCont
   if (asString(parsed.cwd) !== normalizedCwd) return null;
 
   const priorities = new Map<string, number>();
-  addPriority(priorities, relativeFile(normalizedCwd, asString(parsed.current_file)), 10_000);
-  addPriority(priorities, relativeFile(normalizedCwd, asString(parsed.alternate_file)), 9_000);
+  const sources = new Map<string, NvimContextSource>();
+  addPriority(priorities, sources, relativeFile(normalizedCwd, asString(parsed.current_file)), 10_000, "current");
+  addPriority(priorities, sources, relativeFile(normalizedCwd, asString(parsed.alternate_file)), 9_000, "alternate");
 
   asStringArray(parsed.open_buffers).forEach((file, index) => {
-    addPriority(priorities, relativeFile(normalizedCwd, file), 8_000 - index);
+    addPriority(priorities, sources, relativeFile(normalizedCwd, file), 8_000 - index, "buffer");
   });
   asStringArray(parsed.recent_files).forEach((file, index) => {
-    addPriority(priorities, relativeFile(normalizedCwd, file), 6_000 - index);
+    addPriority(priorities, sources, relativeFile(normalizedCwd, file), 6_000 - index, "recent");
   });
 
-  return { priorities };
+  return { priorities, sources };
 }

@@ -1,9 +1,14 @@
-import { loadNvimPickerContext, type NvimPickerContext } from "../shared/nvim-context.ts";
+import {
+  loadNvimPickerContext,
+  type NvimContextSource,
+  type NvimPickerContext,
+} from "../shared/nvim-context.ts";
 
 export type FileHit = {
   readonly kind: "file";
   readonly path: string;
   readonly fileName: string;
+  readonly source: NvimContextSource | null;
 };
 
 export type ContentHit = {
@@ -47,11 +52,20 @@ function prioritizeFiles(
   const byPath = new Map(files.map((file) => [file.path, file]));
   for (const path of context.priorities.keys()) {
     if (!byPath.has(path) && matchesQuery(path, query)) {
-      byPath.set(path, { kind: "file", path, fileName: basename(path) });
+      byPath.set(path, {
+        kind: "file",
+        path,
+        fileName: basename(path),
+        source: context.sources.get(path) ?? null,
+      });
     }
   }
 
   return [...byPath.values()]
+    .map((file) => ({
+      ...file,
+      source: context.sources.get(file.path) ?? file.source,
+    }))
     .map((file, index) => ({
       file,
       index,
@@ -82,7 +96,7 @@ async function listAllFiles(cwd: string, limit: number): Promise<readonly FileHi
   return text
     .split("\n")
     .filter(Boolean)
-    .map((path) => ({ kind: "file" as const, path, fileName: basename(path) }));
+    .map((path) => ({ kind: "file" as const, path, fileName: basename(path), source: null }));
 }
 
 async function findFiles(query: string, cwd: string, limit: number): Promise<readonly FileHit[]> {
@@ -104,7 +118,7 @@ async function findFiles(query: string, cwd: string, limit: number): Promise<rea
   return text
     .split("\n")
     .filter(Boolean)
-    .map((path) => ({ kind: "file" as const, path, fileName: basename(path) }));
+    .map((path) => ({ kind: "file" as const, path, fileName: basename(path), source: null }));
 }
 
 async function grepContent(query: string, cwd: string, limit: number): Promise<readonly ContentHit[]> {

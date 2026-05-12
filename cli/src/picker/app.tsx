@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useKeyboard, useRenderer } from "@opentui/react";
-import { type ScrollBoxRenderable, type TreeSitterClient } from "@opentui/core";
+import { type ColorInput, type ScrollBoxRenderable, type TreeSitterClient } from "@opentui/core";
 import { createFinder, type Hit } from "./finder.ts";
 import { getHighlighter } from "./highlighter.ts";
 import { buildAbsPath, loadPreview, sliceAround, type PreviewContent } from "./preview.ts";
+import type { NvimContextSource } from "../shared/nvim-context.ts";
 import type { PickerTheme } from "./theme.ts";
 import { pasteToPane, resolveAgentPane } from "./tmux.ts";
 
@@ -169,6 +170,7 @@ export function PickerApp({ cwd, targetPane, initialQuery = "", theme }: PickerP
                 key={rowKey(hit, index)}
                 id={resultRowId(index)}
                 hit={hit}
+                query={query}
                 selected={index === visibleSelected}
                 theme={theme}
               />
@@ -209,11 +211,13 @@ function Prompt({
 function Row({
   id,
   hit,
+  query,
   selected,
   theme,
 }: {
   readonly id: string;
   readonly hit: Hit;
+  readonly query: string;
   readonly selected: boolean;
   readonly theme: PickerTheme;
 }) {
@@ -224,6 +228,7 @@ function Row({
 
   if (hit.kind === "file") {
     const dir = hit.path.slice(0, hit.path.length - hit.fileName.length);
+    const badge = nvimBadge(hit.source);
     return (
       <box
         id={id}
@@ -236,8 +241,19 @@ function Row({
         }}
       >
         <text fg={pointerColor}>{pointer} </text>
-        <text fg={theme.colors.pathFg}>{dir}</text>
-        <text fg={nameColor}>{hit.fileName}</text>
+        {badge ? <Badge label={badge} theme={theme} selected={selected} /> : null}
+        <HighlightedText
+          text={dir}
+          query={query}
+          fg={theme.colors.pathFg}
+          matchFg={theme.colors.accent}
+        />
+        <HighlightedText
+          text={hit.fileName}
+          query={query}
+          fg={nameColor}
+          matchFg={theme.colors.accent}
+        />
       </box>
     );
   }
@@ -255,11 +271,21 @@ function Row({
     >
       <box style={{ flexDirection: "row" }}>
         <text fg={pointerColor}>{pointer} </text>
-        <text fg={nameColor}>{hit.fileName}</text>
+        <HighlightedText
+          text={hit.fileName}
+          query={query}
+          fg={nameColor}
+          matchFg={theme.colors.accent}
+        />
         <text fg={theme.colors.dimFg}>:{hit.lineNumber}</text>
       </box>
       <box style={{ flexDirection: "row", paddingLeft: 4 }}>
-        <text fg={theme.colors.dimFg}>{hit.line.slice(0, 200)}</text>
+        <HighlightedText
+          text={hit.line.slice(0, 200)}
+          query={query}
+          fg={theme.colors.dimFg}
+          matchFg={theme.colors.accent}
+        />
       </box>
     </box>
   );
@@ -311,6 +337,71 @@ function Preview({
       )}
     </box>
   );
+}
+
+function Badge({
+  label,
+  selected,
+  theme,
+}: {
+  readonly label: string;
+  readonly selected: boolean;
+  readonly theme: PickerTheme;
+}) {
+  return (
+    <>
+      <text fg={selected ? theme.colors.selectedBg : theme.colors.panelBg} bg={theme.colors.accent}>{` ${label} `}</text>
+      <text fg={theme.colors.dimFg}> </text>
+    </>
+  );
+}
+
+function HighlightedText({
+  fg,
+  matchFg,
+  query,
+  text,
+}: {
+  readonly fg: ColorInput;
+  readonly matchFg: ColorInput;
+  readonly query: string;
+  readonly text: string;
+}) {
+  const parts = splitMatches(text, query);
+  return (
+    <>
+      {parts.map((part, index) => (
+        <text key={`${index}:${part.text}`} fg={part.match ? matchFg : fg}>{part.text}</text>
+      ))}
+    </>
+  );
+}
+
+function splitMatches(text: string, query: string): readonly { readonly text: string; readonly match: boolean }[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return [{ text, match: false }];
+
+  const parts: { text: string; match: boolean }[] = [];
+  const haystack = text.toLowerCase();
+  let cursor = 0;
+  while (cursor < text.length) {
+    const index = haystack.indexOf(needle, cursor);
+    if (index < 0) {
+      parts.push({ text: text.slice(cursor), match: false });
+      break;
+    }
+    if (index > cursor) {
+      parts.push({ text: text.slice(cursor, index), match: false });
+    }
+    parts.push({ text: text.slice(index, index + needle.length), match: true });
+    cursor = index + needle.length;
+  }
+  return parts.length > 0 ? parts : [{ text, match: false }];
+}
+
+function nvimBadge(source: NvimContextSource | null): string | null {
+  if (!source) return null;
+  return "NV";
 }
 
 function rowKey(hit: Hit, index: number): string {
