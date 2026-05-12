@@ -1,3 +1,5 @@
+import { runAgentPicker } from "./commands/agent-picker.tsx";
+import { runAgentToggle } from "./commands/agent-toggle.ts";
 import { runAttach } from "./commands/attach.ts";
 import { runDaemon } from "./commands/daemon.ts";
 import { runGrammar } from "./commands/grammar.ts";
@@ -8,7 +10,7 @@ import { runNew } from "./commands/new.ts";
 import { runPick, runPickAgent } from "./commands/pick.tsx";
 import { runRelease, runReport } from "./commands/report.ts";
 import { runSidebar } from "./commands/sidebar.tsx";
-import { runNewAgentPopup, runPickPopup } from "./commands/tmux-popup.ts";
+import { runAgentPickerPopup, runNewAgentPopup, runPickPopup } from "./commands/tmux-popup.ts";
 import { runRouter } from "./commands/tmux-router.ts";
 import { runSidebarEnforceWidth, runSidebarToggle } from "./commands/tmux-sidebar.ts";
 import { runWatch } from "./commands/watch.ts";
@@ -21,6 +23,9 @@ usage:
   switchboard sidebar [--cwd PATH | --all]          tui sidebar (default: cwd of this pane)
   switchboard new <tool> [--detach] [args...]       spawn agent in a detached tmux session
   switchboard new-agent [--cwd PATH]                picker for spawning installed agents
+  switchboard agent-picker [--cwd PATH]             picker for attaching or creating agents
+  switchboard agent-picker-popup [pane]             tmux popup wrapper for agent-picker
+  switchboard agent-toggle [pane]                   toggle last cwd agent or open agent-picker
   switchboard new-agent-popup [pane]                tmux popup wrapper for new-agent
   switchboard attach <session>                      open a viewer pane that attaches to an agent
   switchboard pick [--target PANE] [--cwd PATH]     file/content picker; inserts @path into target
@@ -67,6 +72,15 @@ async function main(): Promise<void> {
       return;
     case "new-agent":
       await runNewAgent(rest);
+      return;
+    case "agent-picker":
+      await runAgentPicker(rest);
+      return;
+    case "agent-picker-popup":
+      await runAgentPickerPopup(rest);
+      return;
+    case "agent-toggle":
+      await runAgentToggle(rest);
       return;
     case "new-agent-popup":
       await runNewAgentPopup(rest);

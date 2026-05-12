@@ -108,8 +108,30 @@ switchboard new-agent
 ```
 
 The tmux plugin can open it in a popup with `@switchboard-new-agent-key` or
-`@switchboard-new-agent-key-no-prefix`. The sidebar `n` shortcut uses the same
-popup launcher.
+`@switchboard-new-agent-key-no-prefix`.
+
+For day-to-day tmux use, the broader attach/create picker is usually the better
+binding:
+
+```sh
+switchboard agent-picker
+```
+
+The tmux plugin can open it in a popup with `@switchboard-agent-picker-key` or
+`@switchboard-agent-picker-key-no-prefix`. It starts on agents in the current cwd,
+has an `all` tab for every switchboard agent, and includes create rows for
+installed integrations. The sidebar `n` shortcut uses this popup.
+
+`switchboard agent-toggle` is the faster path for a repeated workflow: it toggles
+the last attached agent for the current cwd. If there is no remembered agent, it
+falls back to the attach/create picker.
+
+Example:
+
+```tmux
+set -g @switchboard-agent-toggle-key-no-prefix "M-c"
+set -g @switchboard-agent-picker-key "C"
+```
 
 ### Picker Theme
 
@@ -314,6 +336,10 @@ set -g @switchboard-picker-key ""
 set -g @switchboard-picker-key-no-prefix ""
 set -g @switchboard-new-agent-key ""
 set -g @switchboard-new-agent-key-no-prefix ""
+set -g @switchboard-agent-picker-key ""
+set -g @switchboard-agent-picker-key-no-prefix ""
+set -g @switchboard-agent-toggle-key ""
+set -g @switchboard-agent-toggle-key-no-prefix ""
 ```
 
 | Option | Default | Meaning |
@@ -335,3 +361,7 @@ set -g @switchboard-new-agent-key-no-prefix ""
 | `@switchboard-picker-key-no-prefix` | unset | Global picker key |
 | `@switchboard-new-agent-key` | unset | Prefix-table new-agent popup key |
 | `@switchboard-new-agent-key-no-prefix` | unset | Global new-agent popup key |
+| `@switchboard-agent-picker-key` | unset | Prefix-table attach/create agent picker key |
+| `@switchboard-agent-picker-key-no-prefix` | unset | Global attach/create agent picker key |
+| `@switchboard-agent-toggle-key` | unset | Prefix-table key to toggle the last cwd agent or open the picker |
+| `@switchboard-agent-toggle-key-no-prefix` | unset | Global key to toggle the last cwd agent or open the picker |

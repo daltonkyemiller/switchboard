@@ -98,6 +98,24 @@ export async function findSidebar(windowId: string): Promise<string> {
   return panes.find((pane) => pane.role === "sidebar")?.paneId ?? "";
 }
 
+export async function viewerPaneForSessionInWindow(windowId: string, session: string): Promise<string> {
+  const result = await tmux([
+    "list-panes",
+    "-t",
+    windowId,
+    "-F",
+    "#{pane_id}\t#{@switchboard_role}\t#{@switchboard_target_session}",
+  ]);
+  if (!result.ok) return "";
+
+  return (
+    result.stdout
+      .split("\n")
+      .map((line) => line.split("\t"))
+      .find(([, role, target]) => role === "viewer" && target === session)?.[0] ?? ""
+  );
+}
+
 export async function largestWorkingPane(windowId: string): Promise<string> {
   const panes = await windowPanes(windowId);
   return (
@@ -137,6 +155,12 @@ export async function targetForAction(callerPane: string): Promise<string> {
   }
 
   return callerPane;
+}
+
+export async function targetPaneForSpawn(bindingPane: string): Promise<string> {
+  if ((await paneRole(bindingPane)) !== "sidebar") return bindingPane;
+  const windowId = await paneWindow(bindingPane);
+  return windowId ? largestWorkingPane(windowId) : "";
 }
 
 export async function popupClientForPane(pane: string): Promise<string> {
@@ -204,6 +228,12 @@ export async function agentCwdForViewer(pane: string): Promise<string> {
   const result = await agentTmux(["list-panes", "-t", session, "-F", "#{pane_current_path}"]);
   if (!result.ok) return "";
   return result.stdout.split("\n")[0] ?? "";
+}
+
+export async function cwdForTargetPane(targetPane: string): Promise<string> {
+  const agentCwd = await agentCwdForViewer(targetPane);
+  if (agentCwd) return agentCwd;
+  return (await paneCwd(targetPane)) || process.cwd();
 }
 
 export async function sidebarWidth(): Promise<number> {

@@ -1,5 +1,6 @@
 import { paths } from "../shared/paths.ts";
 import { agentTmux, shellQuote, switchboardCommand, tmux } from "../shared/tmux.ts";
+import { rememberLastAgent } from "../shared/last-agent.ts";
 
 const DEFAULT_VIEWER_WIDTH = "80";
 const VIEWER_CLIENT_FLAGS = "active-pane";
@@ -54,6 +55,11 @@ export async function attachAgentSession(options: AttachOptions): Promise<string
     tmux(["set-option", "-p", "-t", paneId, "-q", "@switchboard_role", "viewer"]),
     tmux(["set-option", "-p", "-t", paneId, "-q", "@switchboard_target_session", options.target]),
   ]);
+
+  const cwd = await agentTmux(["show-options", "-t", options.target, "-qv", "@switchboard_cwd"]);
+  if (cwd.ok && cwd.stdout) {
+    await rememberLastAgent(cwd.stdout, options.target);
+  }
 
   return paneId;
 }

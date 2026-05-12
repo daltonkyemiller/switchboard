@@ -106,10 +106,10 @@ export function SidebarApp({ filterCwd }: SidebarProps) {
     }
   }, [visible, selectedPaneId]);
 
-  async function openNewAgentPopup(): Promise<void> {
+  async function openAgentPickerPopup(): Promise<void> {
     const configuredBin = await getTmuxOption("@switchboard-bin");
     const switchboardBin = configuredBin || switchboardBinary();
-    Bun.spawn([switchboardBin, "new-agent-popup", process.env["TMUX_PANE"] ?? ""], {
+    Bun.spawn([switchboardBin, "agent-picker-popup", process.env["TMUX_PANE"] ?? ""], {
       stderr: "ignore",
       stdout: "ignore",
     });
@@ -141,7 +141,7 @@ export function SidebarApp({ filterCwd }: SidebarProps) {
     }
 
     if (key.name === "n") {
-      void openNewAgentPopup().catch((error) => {
+      void openAgentPickerPopup().catch((error) => {
         const message = error instanceof Error ? error.message : "failed to open launcher";
         setNotice(message);
       });
@@ -248,7 +248,7 @@ export function SidebarApp({ filterCwd }: SidebarProps) {
         )}
       </box>
       {notice ? <text fg="#928374">{truncate(notice, 80)}</text> : null}
-      <text fg="#665c54">[/] tabs · j/k · enter attach · n new · q quit</text>
+      <text fg="#665c54">[/] tabs · j/k · enter attach · n agents · q quit</text>
     </box>
   );
 }

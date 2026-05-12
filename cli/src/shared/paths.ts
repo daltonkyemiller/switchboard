@@ -32,6 +32,7 @@ export const paths = {
   generatedAgentTmuxConfigFile: join(stateDir, "agent-tmux.generated.conf"),
   pidFile: join(runtimeDir, "daemon.pid"),
   agentsSnapshot: join(stateDir, "agents.json"),
+  lastAgentsFile: join(stateDir, "last-agents.json"),
   logFile: join(stateDir, "daemon.log"),
   popupLogFile: join(stateDir, "popup.log"),
   nvimContextDir: join(stateDir, "nvim-context"),

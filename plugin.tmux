@@ -28,6 +28,10 @@
 #   @switchboard-picker-key-no-prefix  key (no-prefix) for the picker popup
 #   @switchboard-new-agent-key         key (prefix-table) for new-agent popup
 #   @switchboard-new-agent-key-no-prefix key (no-prefix) for new-agent popup
+#   @switchboard-agent-picker-key      key (prefix-table) for attach/create popup
+#   @switchboard-agent-picker-key-no-prefix key (no-prefix) for attach/create popup
+#   @switchboard-agent-toggle-key      key (prefix-table) for toggle last cwd agent
+#   @switchboard-agent-toggle-key-no-prefix key (no-prefix) for toggle last cwd agent
 #
 # Either or both toggle-key options may be set.
 
@@ -58,6 +62,10 @@ picker_key=$(tmux_option_or_default "@switchboard-picker-key" "")
 picker_key_no_prefix=$(tmux_option_or_default "@switchboard-picker-key-no-prefix" "")
 new_agent_key=$(tmux_option_or_default "@switchboard-new-agent-key" "")
 new_agent_key_no_prefix=$(tmux_option_or_default "@switchboard-new-agent-key-no-prefix" "")
+agent_picker_key=$(tmux_option_or_default "@switchboard-agent-picker-key" "")
+agent_picker_key_no_prefix=$(tmux_option_or_default "@switchboard-agent-picker-key-no-prefix" "")
+agent_toggle_key=$(tmux_option_or_default "@switchboard-agent-toggle-key" "")
+agent_toggle_key_no_prefix=$(tmux_option_or_default "@switchboard-agent-toggle-key-no-prefix" "")
 
 switchboard_cmd=$(shell_quote "$switchboard_bin")
 toggle_invocation="$switchboard_cmd sidebar-toggle #{pane_id}"
@@ -90,7 +98,9 @@ if [[ -n "$picker_key" ]]; then
   tmux bind-key "$picker_key" run-shell "$picker_invocation"
 fi
 if [[ -n "$picker_key_no_prefix" ]]; then
-  tmux bind-key -n "$picker_key_no_prefix" run-shell "$picker_invocation"
+  tmux bind-key -n "$picker_key_no_prefix" if -F '#{==:#{@switchboard_role},viewer}' \
+    "run-shell \"$picker_invocation\"" \
+    "send-keys -l $(shell_quote "$picker_key_no_prefix")"
 fi
 
 new_agent_invocation="$switchboard_cmd new-agent-popup #{pane_id}"
@@ -99,4 +109,20 @@ if [[ -n "$new_agent_key" ]]; then
 fi
 if [[ -n "$new_agent_key_no_prefix" ]]; then
   tmux bind-key -n "$new_agent_key_no_prefix" run-shell "$new_agent_invocation"
+fi
+
+agent_picker_invocation="$switchboard_cmd agent-picker-popup #{pane_id}"
+if [[ -n "$agent_picker_key" ]]; then
+  tmux bind-key "$agent_picker_key" run-shell "$agent_picker_invocation"
+fi
+if [[ -n "$agent_picker_key_no_prefix" ]]; then
+  tmux bind-key -n "$agent_picker_key_no_prefix" run-shell "$agent_picker_invocation"
+fi
+
+agent_toggle_invocation="$switchboard_cmd agent-toggle #{pane_id}"
+if [[ -n "$agent_toggle_key" ]]; then
+  tmux bind-key "$agent_toggle_key" run-shell "$agent_toggle_invocation"
+fi
+if [[ -n "$agent_toggle_key_no_prefix" ]]; then
+  tmux bind-key -n "$agent_toggle_key_no_prefix" run-shell "$agent_toggle_invocation"
 fi
