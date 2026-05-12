@@ -147,7 +147,6 @@ Single binary. CLI, daemon, and TUI all live in one Bun-compiled executable, dis
 ```
 switchboard/
 ├── plugin.tmux            # tmux plugin entrypoint — sourced by TPM
-├── scripts/               # bash helpers invoked from tmux bindings (pickers, etc.)
 ├── cli/                   # the single binary lives here
 │   ├── src/
 │   │   ├── index.tsx      # entry — argv router into commands / daemon / sidebar
@@ -171,7 +170,7 @@ Subdirs under `src/` are aspirational — create them as the work calls for it. 
 - **TUI:** [OpenTUI](https://github.com/sst/opentui) (`@opentui/core`, `@opentui/react`). **Always load the `opentui` skill before writing TUI code** — it's vendored under `.agents/skills/opentui` precisely so an agent working here has the API reference at hand.
 - **Daemon:** Bun's built-in `Bun.listen` / `Bun.connect` for Unix sockets. No external server framework.
 - **Hooks:** shell scripts (Claude, Codex) or JS plugin (OpenCode). Bundled into the binary as text and written to disk by `integration install`. Match herdr's ~70-line ceiling per hook.
-- **tmux glue:** bash in `scripts/`, sourced from `plugin.tmux`.
+- **tmux glue:** `plugin.tmux` binds keys and calls CLI subcommands. Runtime behavior lives in TypeScript, not standalone shell scripts.
 
 ## Conventions
 
