@@ -2,6 +2,7 @@ import { mkdir, unlink } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { Socket } from "bun";
 import { paths } from "../shared/paths.ts";
+import { cleanupAgentTmuxSocket } from "../shared/tmux.ts";
 import type {
   Event,
   ReleaseAgentParams,
@@ -31,17 +32,17 @@ function fail(id: string, message: string, code = -1): Response {
 }
 
 async function buildState(params: ReportAgentParams): Promise<AgentState> {
-  const info = await paneInfo(params.pane_id);
+  const info = await paneInfo(params.pane_id, params.tmux_server ?? "agent");
   return {
     paneId: params.pane_id,
     tool: params.agent,
     status: params.state,
-    cwd: info?.cwd ?? "",
-    pid: params.pid ?? null,
+    cwd: params.cwd ?? info?.cwd ?? "",
+    pid: params.pid ?? info?.panePid ?? null,
     promptPreview: params.prompt_preview ?? null,
-    session: info?.session ?? "",
-    windowIndex: info?.windowIndex ?? -1,
-    windowName: info?.windowName ?? "",
+    session: params.session ?? info?.session ?? "",
+    windowIndex: params.window_index ?? info?.windowIndex ?? -1,
+    windowName: params.window_name ?? info?.windowName ?? "",
     updatedAt: Date.now(),
     seq: params.seq,
   };
@@ -147,6 +148,7 @@ async function ensureSocketFree(): Promise<void> {
 export async function startServer(): Promise<() => Promise<void>> {
   await mkdir(dirname(paths.socket), { recursive: true });
   await mkdir(dirname(paths.agentsSnapshot), { recursive: true });
+  await cleanupAgentTmuxSocket();
   await ensureSocketFree();
 
   const server = Bun.listen<ConnState>({

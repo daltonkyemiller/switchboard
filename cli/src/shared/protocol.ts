@@ -6,8 +6,13 @@ export type ReportAgentParams = {
   readonly agent: Tool;
   readonly state: AgentStatus;
   readonly seq: number;
+  readonly tmux_server?: "agent" | "outer";
   readonly pid?: number;
   readonly prompt_preview?: string;
+  readonly cwd?: string;
+  readonly session?: string;
+  readonly window_index?: number;
+  readonly window_name?: string;
 };
 
 export type ReleaseAgentParams = {

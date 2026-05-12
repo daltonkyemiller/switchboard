@@ -1,3 +1,7 @@
+import { agentTmux, tmux } from "../shared/tmux.ts";
+
+type TmuxServer = "agent" | "outer";
+
 type PaneInfo = {
   readonly paneId: string;
   readonly panePid: number;
@@ -7,7 +11,7 @@ type PaneInfo = {
   readonly cwd: string;
 };
 
-export async function listPanes(): Promise<readonly PaneInfo[] | null> {
+async function listPanesFor(server: TmuxServer): Promise<readonly PaneInfo[] | null> {
   const format = [
     "#{pane_id}",
     "#{pane_pid}",
@@ -17,14 +21,13 @@ export async function listPanes(): Promise<readonly PaneInfo[] | null> {
     "#{pane_current_path}",
   ].join("\t");
 
-  const proc = Bun.spawn(["tmux", "list-panes", "-aF", format], {
-    stdout: "pipe",
-    stderr: "ignore",
-  });
-  const exitCode = await proc.exited;
-  if (exitCode !== 0) return null;
+  const result =
+    server === "agent"
+      ? await agentTmux(["list-panes", "-aF", format])
+      : await tmux(["list-panes", "-aF", format]);
+  if (!result.ok) return null;
 
-  const text = await new Response(proc.stdout).text();
+  const text = result.stdout;
   const lines = text.split("\n").filter(Boolean);
 
   return lines.flatMap((line) => {
@@ -45,8 +48,22 @@ export async function listPanes(): Promise<readonly PaneInfo[] | null> {
   });
 }
 
-export async function paneInfo(paneId: string): Promise<PaneInfo | null> {
-  const all = await listPanes();
-  if (!all) return null;
-  return all.find((p) => p.paneId === paneId) ?? null;
+export async function listPanes(): Promise<readonly PaneInfo[] | null> {
+  const agentPanes = await listPanesFor("agent");
+  const outerPanes = await listPanesFor("outer");
+  if (agentPanes === null && outerPanes === null) return null;
+  return [...(agentPanes ?? []), ...(outerPanes ?? [])];
+}
+
+export async function paneInfo(
+  paneId: string,
+  preferredServer: TmuxServer = "agent",
+): Promise<PaneInfo | null> {
+  const first = await listPanesFor(preferredServer);
+  const firstMatch = first?.find((p) => p.paneId === paneId);
+  if (firstMatch) return firstMatch;
+
+  const secondServer = preferredServer === "agent" ? "outer" : "agent";
+  const second = await listPanesFor(secondServer);
+  return second?.find((p) => p.paneId === paneId) ?? null;
 }
