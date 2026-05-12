@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useKeyboard, useRenderer } from "@opentui/react";
-import { type ColorInput, type ScrollBoxRenderable, type TreeSitterClient } from "@opentui/core";
+import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
+import {
+  type ColorInput,
+  fg as styledFg,
+  type ScrollBoxRenderable,
+  StyledText,
+  type TreeSitterClient,
+} from "@opentui/core";
 import { createFinder, type Hit } from "./finder.ts";
 import { getHighlighter } from "./highlighter.ts";
 import { buildAbsPath, loadPreview, sliceAround, type PreviewContent } from "./preview.ts";
@@ -19,6 +25,7 @@ type PickerProps = {
 
 export function PickerApp({ cwd, targetPane, initialQuery = "", theme }: PickerProps) {
   const renderer = useRenderer();
+  const terminal = useTerminalDimensions();
   const finderRef = useRef(createFinder(cwd));
   const resultsRef = useRef<ScrollBoxRenderable | null>(null);
   const [mode, setMode] = useState<Mode>("files");
@@ -146,19 +153,37 @@ export function PickerApp({ cwd, targetPane, initialQuery = "", theme }: PickerP
 
   const visible = useMemo(() => hits.slice(0, 200), [hits]);
   const visibleSelected = Math.min(selected, Math.max(visible.length - 1, 0));
+  const resultRowHeight = mode === "content" ? 2 : 1;
+  const resultViewportRows = Math.max(1, terminal.height - 5);
 
   useEffect(() => {
-    resultsRef.current?.scrollChildIntoView(resultRowId(visibleSelected));
-  }, [visibleSelected, visible]);
+    const results = resultsRef.current;
+    if (!results) return;
+
+    const selectedTop = visibleSelected * resultRowHeight;
+    const selectedBottom = selectedTop + resultRowHeight;
+    const viewportTop = results.scrollTop;
+    const viewportBottom = viewportTop + resultViewportRows;
+
+    if (selectedTop < viewportTop) {
+      results.scrollTo(selectedTop);
+      return;
+    }
+
+    if (selectedBottom > viewportBottom) {
+      results.scrollTo(selectedBottom - resultViewportRows);
+    }
+  }, [visibleSelected, resultRowHeight, resultViewportRows]);
 
   return (
     <box style={{ flexDirection: "column", padding: 1, flexGrow: 1 }}>
       <Prompt mode={mode} query={query} searching={searching} hitCount={hits.length} theme={theme} />
-      <box style={{ flexDirection: "row", marginTop: 1, flexGrow: 1, gap: 1 }}>
+      <box style={{ flexDirection: "row", flexGrow: 1, flexShrink: 1, gap: 1 }}>
         <scrollbox
           ref={resultsRef}
           scrollY={true}
           scrollX={false}
+          focusable={false}
           viewportCulling={true}
           style={{ flexDirection: "column", width: "45%", flexShrink: 0 }}
         >
@@ -179,7 +204,14 @@ export function PickerApp({ cwd, targetPane, initialQuery = "", theme }: PickerP
         </scrollbox>
         <Preview preview={preview} highlighter={highlighter} theme={theme} />
       </box>
-      <text fg={theme.colors.dimFg}>↵ insert · ⇥ {mode === "files" ? "→ content" : "→ files"} · esc cancel</text>
+      <text
+        fg={theme.colors.dimFg}
+        wrapMode="none"
+        truncate={true}
+        style={{ height: 1, flexShrink: 0 }}
+      >
+        ↵ insert · ⇥ {mode === "files" ? "→ content" : "→ files"} · esc cancel
+      </text>
     </box>
   );
 }
@@ -198,7 +230,7 @@ function Prompt({
   readonly theme: PickerTheme;
 }) {
   return (
-    <box style={{ flexDirection: "row" }}>
+    <box style={{ flexDirection: "row", height: 1, flexShrink: 0 }}>
       <text fg={theme.colors.accent}>{mode === "files" ? "files" : "grep "} </text>
       <text fg={theme.colors.promptFg}>❯ </text>
       <text fg={theme.colors.selectedFg}>{query}</text>
@@ -234,24 +266,22 @@ function Row({
         id={id}
         style={{
           flexDirection: "row",
+          height: 1,
           paddingLeft: 1,
           paddingRight: 1,
           width: "100%",
+          flexShrink: 0,
           backgroundColor: bg,
         }}
       >
         <text fg={pointerColor}>{pointer} </text>
-        {badge ? <Badge label={badge} theme={theme} selected={selected} /> : null}
-        <HighlightedText
-          text={dir}
+        <Badge label={badge} theme={theme} selected={selected} />
+        <PathText
+          dir={dir}
+          fileName={hit.fileName}
           query={query}
-          fg={theme.colors.pathFg}
-          matchFg={theme.colors.accent}
-        />
-        <HighlightedText
-          text={hit.fileName}
-          query={query}
-          fg={nameColor}
+          dirFg={theme.colors.pathFg}
+          fileFg={nameColor}
           matchFg={theme.colors.accent}
         />
       </box>
@@ -263,23 +293,30 @@ function Row({
       id={id}
       style={{
         flexDirection: "column",
+        height: 2,
         paddingLeft: 1,
         paddingRight: 1,
         width: "100%",
+        flexShrink: 0,
         backgroundColor: bg,
       }}
     >
-      <box style={{ flexDirection: "row" }}>
+      <box style={{ flexDirection: "row", height: 1 }}>
         <text fg={pointerColor}>{pointer} </text>
-        <HighlightedText
-          text={hit.fileName}
-          query={query}
-          fg={nameColor}
-          matchFg={theme.colors.accent}
+        <text
+          content={styledMatchText(
+            [
+              { text: hit.fileName, fg: nameColor },
+              { text: `:${hit.lineNumber}`, fg: theme.colors.dimFg },
+            ],
+            query,
+            theme.colors.accent,
+          )}
+          wrapMode="none"
+          truncate={true}
         />
-        <text fg={theme.colors.dimFg}>:{hit.lineNumber}</text>
       </box>
-      <box style={{ flexDirection: "row", paddingLeft: 4 }}>
+      <box style={{ flexDirection: "row", height: 1, paddingLeft: 4 }}>
         <HighlightedText
           text={hit.line.slice(0, 200)}
           query={query}
@@ -344,15 +381,62 @@ function Badge({
   selected,
   theme,
 }: {
-  readonly label: string;
+  readonly label: string | null;
   readonly selected: boolean;
   readonly theme: PickerTheme;
 }) {
+  if (!label) {
+    return (
+      <text
+        content="    "
+        wrapMode="none"
+        truncate={true}
+        style={{ width: 4, height: 1 }}
+      />
+    );
+  }
+
   return (
-    <>
-      <text fg={selected ? theme.colors.selectedBg : theme.colors.panelBg} bg={theme.colors.accent}>{` ${label} `}</text>
-      <text fg={theme.colors.dimFg}> </text>
-    </>
+    <text
+      content={` ${label} `}
+      fg={selected ? theme.colors.selectedBg : theme.colors.panelBg}
+      bg={theme.colors.accent}
+      wrapMode="none"
+      truncate={true}
+      style={{ width: 4, height: 1, flexShrink: 0 }}
+    />
+  );
+}
+
+function PathText({
+  dir,
+  dirFg,
+  fileFg,
+  fileName,
+  matchFg,
+  query,
+}: {
+  readonly dir: string;
+  readonly dirFg: ColorInput;
+  readonly fileFg: ColorInput;
+  readonly fileName: string;
+  readonly matchFg: ColorInput;
+  readonly query: string;
+}) {
+  return (
+    <text
+      content={styledMatchText(
+        [
+          { text: dir, fg: dirFg },
+          { text: fileName, fg: fileFg },
+        ],
+        query,
+        matchFg,
+      )}
+      wrapMode="none"
+      truncate={true}
+      style={{ flexGrow: 1, flexShrink: 1, height: 1 }}
+    />
   );
 }
 
@@ -367,14 +451,26 @@ function HighlightedText({
   readonly query: string;
   readonly text: string;
 }) {
-  const parts = splitMatches(text, query);
   return (
-    <>
-      {parts.map((part, index) => (
-        <text key={`${index}:${part.text}`} fg={part.match ? matchFg : fg}>{part.text}</text>
-      ))}
-    </>
+    <text
+      content={styledMatchText([{ text, fg }], query, matchFg)}
+      wrapMode="none"
+      truncate={true}
+    />
   );
+}
+
+function styledMatchText(
+  segments: readonly { readonly text: string; readonly fg: ColorInput }[],
+  query: string,
+  matchFg: ColorInput,
+): StyledText {
+  const chunks = segments.flatMap((segment) =>
+    splitMatches(segment.text, query).map((part) =>
+      styledFg(part.match ? matchFg : segment.fg)(part.text),
+    ),
+  );
+  return new StyledText(chunks);
 }
 
 function splitMatches(text: string, query: string): readonly { readonly text: string; readonly match: boolean }[] {

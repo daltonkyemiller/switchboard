@@ -42,9 +42,9 @@ type SidebarSpacing = {
 };
 
 const SIDEBAR_SPACING: Record<SidebarDensity, SidebarSpacing> = {
-  dense: { group: 0, row: 0 },
-  normal: { group: 0, row: 1 },
-  loose: { group: 1, row: 1 },
+  dense: { group: 1, row: 0 },
+  normal: { group: 1, row: 1 },
+  loose: { group: 2, row: 1 },
 };
 
 function applyEvent(prev: Map<string, AgentState>, event: Event): Map<string, AgentState> {
