@@ -14,6 +14,11 @@ local defaults = {
   max_open_buffers = 20,
   max_recent_files = 50,
   state_dir = default_state_dir(),
+  command = "switchboard",
+  send = {
+    submit = true,
+    select_agent = false,
+  },
 }
 
 local config = vim.deepcopy(defaults)
@@ -124,6 +129,11 @@ end
 
 function M.setup(opts)
   config = vim.tbl_deep_extend("force", defaults, opts or {})
+  require("switchboard.commands").setup({
+    command = config.command,
+    submit = config.send.submit,
+    select_agent = config.send.select_agent,
+  })
   vim.api.nvim_clear_autocmds({ group = group })
 
   if not config.enabled then return end

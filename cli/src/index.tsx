@@ -10,6 +10,7 @@ import { runNewAgent } from "./commands/new-agent.tsx";
 import { runNew } from "./commands/new.ts";
 import { runPick, runPickAgent } from "./commands/pick.tsx";
 import { runRelease, runReport } from "./commands/report.ts";
+import { runSend, runSendPopup } from "./commands/send.tsx";
 import { runSidebar } from "./commands/sidebar.tsx";
 import { runAgentPickerPopup, runNewAgentPopup, runPickPopup } from "./commands/tmux-popup.ts";
 import { runRouter } from "./commands/tmux-router.ts";
@@ -33,6 +34,8 @@ usage:
   switchboard pick [--target PANE] [--cwd PATH]     file/content picker; inserts @path into target
   switchboard pick-popup [pane]                     tmux popup wrapper for pick
   switchboard pick-agent --session SESSION          internal: open picker from agent tmux server
+  switchboard send [--active|--session SESSION|--select] [--cwd PATH] [--file PATH|--text TEXT] [--no-submit]
+  switchboard send-popup [pane] [--cwd PATH] [--file PATH|--text TEXT] [--no-submit]
   switchboard sidebar-toggle [pane]                 toggle sidebar in the current window
   switchboard sidebar-enforce-width                 clamp sidebar width from tmux hooks
   switchboard router <action> [pane]                routed tmux split/layout/swap/passthrough actions
@@ -101,6 +104,12 @@ async function main(): Promise<void> {
       return;
     case "pick-agent":
       await runPickAgent(rest);
+      return;
+    case "send":
+      await runSend(rest);
+      return;
+    case "send-popup":
+      await runSendPopup(rest);
       return;
     case "sidebar-toggle":
       await runSidebarToggle(rest);
