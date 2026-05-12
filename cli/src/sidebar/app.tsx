@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useKeyboard, useRenderer } from "@opentui/react";
 import { attachAgentSession } from "../commands/attach.ts";
-import { createAgentSession } from "../commands/new.ts";
 import { connect, type Client } from "../shared/client.ts";
 import type { Event } from "../shared/protocol.ts";
 import type { AgentState, AgentStatus } from "../shared/state.ts";
@@ -35,23 +34,31 @@ function applyEvent(prev: Map<string, AgentState>, event: Event): Map<string, Ag
   return next;
 }
 
-function focusPane(agent: AgentState): void {
-  if (agent.session) {
-    Bun.spawn(["tmux", "switch-client", "-t", agent.session], { stderr: "ignore" });
-  }
-  Bun.spawn(["tmux", "select-window", "-t", agent.paneId], { stderr: "ignore" });
-  Bun.spawn(["tmux", "select-pane", "-t", agent.paneId], { stderr: "ignore" });
+async function focusAgent(agent: AgentState): Promise<void> {
+  if (!agent.session) return;
+  await attachAgentSession({ target: agent.session });
 }
 
 type SidebarProps = {
   readonly filterCwd: string | null;
 };
 
+async function getTmuxOption(name: string): Promise<string> {
+  const proc = Bun.spawn(["tmux", "show-options", "-gqv", name], {
+    stdout: "pipe",
+    stderr: "ignore",
+  });
+  const text = await new Response(proc.stdout).text();
+  await proc.exited;
+  return text.trim();
+}
+
 export function SidebarApp({ filterCwd }: SidebarProps) {
   const renderer = useRenderer();
   const [agents, setAgents] = useState<Map<string, AgentState>>(new Map());
   const [connection, setConnection] = useState<ConnectionState>({ kind: "connecting" });
   const [selectedPaneId, setSelectedPaneId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const visible = useMemo(
     () =>
@@ -71,12 +78,30 @@ export function SidebarApp({ filterCwd }: SidebarProps) {
     }
   }, [visible, selectedPaneId]);
 
+  async function openNewAgentPopup(): Promise<void> {
+    const configuredBin = await getTmuxOption("@switchboard-bin");
+    const switchboardBin = configuredBin || process.argv[1] || "switchboard";
+    Bun.spawn([switchboardBin, "new-agent-popup", process.env["TMUX_PANE"] ?? ""], {
+      stderr: "ignore",
+      stdout: "ignore",
+    });
+  }
+
   useKeyboard((key) => {
     if (key.name === "q" || (key.ctrl && key.name === "c")) {
       renderer.destroy();
       process.exit(0);
       return;
     }
+
+    if (key.name === "n") {
+      void openNewAgentPopup().catch((error) => {
+        const message = error instanceof Error ? error.message : "failed to open launcher";
+        setNotice(message);
+      });
+      return;
+    }
+
     if (visible.length === 0) return;
 
     const currentIndex = visible.findIndex((a) => a.paneId === selectedPaneId);
@@ -104,7 +129,7 @@ export function SidebarApp({ filterCwd }: SidebarProps) {
     }
     if (key.name === "return") {
       const selected = visible[safeIndex];
-      if (selected) focusPane(selected);
+      if (selected) void focusAgent(selected).catch(() => {});
       return;
     }
     if (key.name === "a") {
@@ -112,10 +137,6 @@ export function SidebarApp({ filterCwd }: SidebarProps) {
       if (selected?.session) {
         void attachAgentSession({ target: selected.session }).catch(() => {});
       }
-      return;
-    }
-    if (key.name === "n") {
-      void createAgentSession({ tool: "claude" }).catch(() => {});
       return;
     }
   });
@@ -173,6 +194,7 @@ export function SidebarApp({ filterCwd }: SidebarProps) {
           ))
         )}
       </box>
+      {notice ? <text fg="#928374">{truncate(notice, 80)}</text> : null}
       <text fg="#665c54">j/k · enter reveal · a attach · n new · q quit</text>
     </box>
   );
