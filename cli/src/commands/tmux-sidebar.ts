@@ -1,7 +1,7 @@
 import { writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { findSidebar } from "../shared/tmux-pane.ts";
-import { tmux, tmuxOption } from "../shared/tmux.ts";
+import { switchboardCommand, tmux, tmuxOption } from "../shared/tmux.ts";
 
 const ENFORCE_THROTTLE_MS = 200;
 
@@ -31,7 +31,7 @@ export async function runSidebarToggle(args: readonly string[]): Promise<void> {
   }
 
   const width = String(await numericOption("@switchboard-sidebar-width", 32));
-  const command = (await tmuxOption("@switchboard-command")) || `${process.argv[1] ?? "switchboard"} sidebar`;
+  const command = (await tmuxOption("@switchboard-command")) || `${switchboardCommand()} sidebar`;
   const created = await tmux([
     "split-window",
     "-fhb",

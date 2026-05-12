@@ -2,7 +2,7 @@ import { attachAgentSession } from "./attach.ts";
 import { resolveAgentLauncher } from "../shared/agent-config.ts";
 import { connect } from "../shared/client.ts";
 import { paths } from "../shared/paths.ts";
-import { agentTmux } from "../shared/tmux.ts";
+import { agentTmux, shellQuote, switchboardCommand } from "../shared/tmux.ts";
 import type { Tool } from "../shared/state.ts";
 
 const TOOLS = new Set<Tool>(["claude", "codex", "opencode"]);
@@ -24,20 +24,9 @@ function generateSessionName(tool: Tool): string {
   return `${tool}-${stamp}-${rand}`;
 }
 
-const SAFE_ARG = /^[a-zA-Z0-9_\/=:.@%+,-]+$/;
-
-function shellQuote(value: string): string {
-  if (SAFE_ARG.test(value)) return value;
-  return `'${value.replaceAll("'", `'"'"'`)}'`;
-}
-
 async function buildCommandLine(tool: Tool, args: readonly string[]): Promise<string> {
   const launcher = await resolveAgentLauncher(tool);
   return [launcher.command, ...launcher.args.map(shellQuote), ...args.map(shellQuote)].join(" ");
-}
-
-function switchboardCommand(): string {
-  return shellQuote(process.argv[1] ?? "switchboard");
 }
 
 export type CreateAgentOptions = {

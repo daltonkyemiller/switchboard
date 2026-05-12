@@ -1,18 +1,8 @@
 import { paths } from "../shared/paths.ts";
-import { agentTmux, tmux } from "../shared/tmux.ts";
+import { agentTmux, shellQuote, switchboardCommand, tmux } from "../shared/tmux.ts";
 
 const DEFAULT_VIEWER_WIDTH = "80";
 const VIEWER_CLIENT_FLAGS = "active-pane";
-const SAFE_ARG = /^[a-zA-Z0-9_\/=:.@%+,-]+$/;
-
-function shellQuote(value: string): string {
-  if (SAFE_ARG.test(value)) return value;
-  return `'${value.replaceAll("'", `'"'"'`)}'`;
-}
-
-function switchboardCommand(): string {
-  return shellQuote(process.argv[1] ?? "switchboard");
-}
 
 export type AttachOptions = {
   readonly target: string;

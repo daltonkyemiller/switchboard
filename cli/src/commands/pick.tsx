@@ -2,14 +2,8 @@ import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { PickerApp } from "../picker/app.tsx";
 import { loadPickerTheme } from "../picker/theme.ts";
-import { tmux } from "../shared/tmux.ts";
-
-const SAFE_ARG = /^[a-zA-Z0-9_\/=:.@%+,-]+$/;
-
-function shellQuote(value: string): string {
-  if (SAFE_ARG.test(value)) return value;
-  return `'${value.replaceAll("'", `'"'"'`)}'`;
-}
+import { ensureOpenTuiRuntime } from "../shared/opentui-runtime.ts";
+import { popupShellCommand, shellQuote, switchboardCommand, tmux } from "../shared/tmux.ts";
 
 function valueForFlag(args: readonly string[], flag: string): string | null {
   const index = args.indexOf(flag);
@@ -24,6 +18,7 @@ export async function runPick(args: readonly string[]): Promise<void> {
   const queryIndex = args.indexOf("--query");
   const initialQuery = queryIndex >= 0 ? args[queryIndex + 1] ?? "" : "";
 
+  await ensureOpenTuiRuntime();
   const theme = await loadPickerTheme();
   const renderer = await createCliRenderer();
   createRoot(renderer).render(
@@ -45,16 +40,25 @@ export async function runPickAgent(args: readonly string[]): Promise<void> {
     "-F",
     "#{pane_id}\t#{@switchboard_target_session}",
   ]);
-  if (!panes.ok) return;
+  if (!panes.ok) {
+    await tmux(["display-message", `switchboard pick: could not list panes: ${panes.stderr}`]);
+    return;
+  }
 
   const viewerPane = panes.stdout
     .split("\n")
     .map((line) => line.split("\t"))
     .find(([, target]) => target === session)?.[0];
-  if (!viewerPane) return;
+  if (!viewerPane) {
+    await tmux(["display-message", `switchboard pick: no viewer pane for ${session}`]);
+    return;
+  }
 
   const clients = await tmux(["list-clients", "-F", "#{client_name}\t#{pane_id}"]);
-  if (!clients.ok) return;
+  if (!clients.ok) {
+    await tmux(["display-message", `switchboard pick: could not list clients: ${clients.stderr}`]);
+    return;
+  }
   const popupClient = clients.stdout
     .split("\n")
     .map((line) => line.split("\t"))
@@ -75,6 +79,9 @@ export async function runPickAgent(args: readonly string[]): Promise<void> {
     "rounded",
     "-T",
     " switchboard pick ",
-    `${shellQuote(process.argv[1] ?? "switchboard")} pick --target ${shellQuote(viewerPane)} --cwd ${shellQuote(cwd)}`,
+    popupShellCommand(
+      `${switchboardCommand()} pick --target ${shellQuote(viewerPane)} --cwd ${shellQuote(cwd)}`,
+      "switchboard pick popup",
+    ),
   ]);
 }

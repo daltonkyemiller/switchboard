@@ -3,6 +3,7 @@ import { agentTmux, tmux, tmuxOption } from "./tmux.ts";
 
 type TmuxPane = {
   readonly paneId: string;
+  readonly paneIndex: number;
   readonly paneWidth: number;
   readonly role: string;
 };
@@ -78,16 +79,17 @@ async function windowPanes(windowId: string): Promise<readonly TmuxPane[]> {
     "-t",
     windowId,
     "-F",
-    "#{pane_id}\t#{pane_width}\t#{@switchboard_role}",
+    "#{pane_id}\t#{pane_index}\t#{pane_width}\t#{@switchboard_role}",
   ]);
   if (!result.ok) return [];
 
   return result.stdout.split("\n").flatMap((line) => {
-    const [paneId, paneWidth, role = ""] = line.split("\t");
-    if (!paneId || !paneWidth) return [];
+    const [paneId, paneIndex, paneWidth, role = ""] = line.split("\t");
+    if (!paneId || !paneIndex || !paneWidth) return [];
+    const index = Number.parseInt(paneIndex, 10);
     const width = Number.parseInt(paneWidth, 10);
-    if (Number.isNaN(width)) return [];
-    return [{ paneId, paneWidth: width, role }];
+    if (Number.isNaN(index) || Number.isNaN(width)) return [];
+    return [{ paneId, paneIndex: index, paneWidth: width, role }];
   });
 }
 
@@ -108,6 +110,21 @@ export async function largestWorkingPane(windowId: string): Promise<string> {
 export async function workingPaneCount(windowId: string): Promise<number> {
   const panes = await windowPanes(windowId);
   return panes.filter((pane) => pane.role !== "sidebar").length;
+}
+
+export async function adjacentWorkingPane(
+  windowId: string,
+  paneId: string,
+  direction: "previous" | "next",
+): Promise<string> {
+  const panes = (await windowPanes(windowId))
+    .filter((pane) => pane.role !== "sidebar")
+    .sort((a, b) => a.paneIndex - b.paneIndex);
+  const index = panes.findIndex((pane) => pane.paneId === paneId);
+  if (index < 0) return "";
+
+  const adjacentIndex = direction === "previous" ? index - 1 : index + 1;
+  return panes[adjacentIndex]?.paneId ?? "";
 }
 
 export async function targetForAction(callerPane: string): Promise<string> {

@@ -7,7 +7,7 @@ import {
   paneWindow,
   popupClientForPane,
 } from "../shared/tmux-pane.ts";
-import { shellQuote, switchboardCommand, tmux } from "../shared/tmux.ts";
+import { popupShellCommand, shellQuote, switchboardCommand, tmux } from "../shared/tmux.ts";
 
 async function targetPaneForSpawn(bindingPane: string): Promise<string> {
   if ((await paneRole(bindingPane)) !== "sidebar") return bindingPane;
@@ -50,7 +50,10 @@ export async function runNewAgentPopup(args: readonly string[]): Promise<void> {
     "rounded",
     "-T",
     " switchboard new agent ",
-    `${switchboardCommand()} new-agent --target-pane ${shellQuote(targetPane)} --cwd ${shellQuote(cwd)}`,
+    popupShellCommand(
+      `${switchboardCommand()} new-agent --target-pane ${shellQuote(targetPane)} --cwd ${shellQuote(cwd)}`,
+      "switchboard new agent popup",
+    ),
   ]);
 }
 
@@ -61,7 +64,10 @@ export async function runPickPopup(args: readonly string[]): Promise<void> {
     return;
   }
 
-  if (!(await isAgentPane(bindingPane))) return;
+  if (!(await isAgentPane(bindingPane))) {
+    await tmux(["display-message", "switchboard pick: active pane is not an agent"]);
+    return;
+  }
 
   const cwd = (await paneCwd(bindingPane)) || process.cwd();
   const popupClient = await popupClientForPane(bindingPane);
@@ -79,6 +85,9 @@ export async function runPickPopup(args: readonly string[]): Promise<void> {
     "rounded",
     "-T",
     " switchboard pick ",
-    `${switchboardCommand()} pick --target ${shellQuote(bindingPane)} --cwd ${shellQuote(cwd)}`,
+    popupShellCommand(
+      `${switchboardCommand()} pick --target ${shellQuote(bindingPane)} --cwd ${shellQuote(cwd)}`,
+      "switchboard pick popup",
+    ),
   ]);
 }

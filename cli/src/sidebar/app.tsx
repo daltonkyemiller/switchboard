@@ -4,6 +4,7 @@ import { attachAgentSession } from "../commands/attach.ts";
 import { connect, type Client } from "../shared/client.ts";
 import type { Event } from "../shared/protocol.ts";
 import type { AgentState, AgentStatus } from "../shared/state.ts";
+import { switchboardBinary } from "../shared/tmux.ts";
 
 const STATUS_GLYPH: Record<AgentStatus, string> = {
   working: "●",
@@ -24,6 +25,28 @@ type ConnectionState =
   | { kind: "connected" }
   | { kind: "error"; message: string };
 
+type SidebarTab = "cwd" | "all";
+
+const SIDEBAR_TABS: readonly SidebarTab[] = ["cwd", "all"];
+
+type AgentGroup = {
+  readonly cwd: string;
+  readonly agents: readonly AgentState[];
+};
+
+type SidebarDensity = "dense" | "normal" | "loose";
+
+type SidebarSpacing = {
+  readonly group: number;
+  readonly row: number;
+};
+
+const SIDEBAR_SPACING: Record<SidebarDensity, SidebarSpacing> = {
+  dense: { group: 0, row: 0 },
+  normal: { group: 0, row: 1 },
+  loose: { group: 1, row: 1 },
+};
+
 function applyEvent(prev: Map<string, AgentState>, event: Event): Map<string, AgentState> {
   const next = new Map(prev);
   if (event.type === "agent.updated") {
@@ -34,7 +57,7 @@ function applyEvent(prev: Map<string, AgentState>, event: Event): Map<string, Ag
   return next;
 }
 
-async function focusAgent(agent: AgentState): Promise<void> {
+async function attachAgent(agent: AgentState): Promise<void> {
   if (!agent.session) return;
   await attachAgentSession({ target: agent.session });
 }
@@ -59,14 +82,19 @@ export function SidebarApp({ filterCwd }: SidebarProps) {
   const [connection, setConnection] = useState<ConnectionState>({ kind: "connecting" });
   const [selectedPaneId, setSelectedPaneId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [density, setDensity] = useState<SidebarDensity>("dense");
+  const [activeTab, setActiveTab] = useState<SidebarTab>(filterCwd ? "cwd" : "all");
+  const activeFilterCwd = activeTab === "cwd" ? filterCwd : null;
+  const spacing = SIDEBAR_SPACING[density];
 
   const visible = useMemo(
     () =>
       [...agents.values()]
-        .filter((a) => (filterCwd ? a.cwd === filterCwd : true))
+        .filter((a) => (activeFilterCwd ? a.cwd === activeFilterCwd : true))
         .sort((a, b) => b.updatedAt - a.updatedAt),
-    [agents, filterCwd],
+    [agents, activeFilterCwd],
   );
+  const groups = useMemo(() => groupAgentsByCwd(visible), [visible]);
 
   useEffect(() => {
     if (visible.length === 0) {
@@ -80,17 +108,35 @@ export function SidebarApp({ filterCwd }: SidebarProps) {
 
   async function openNewAgentPopup(): Promise<void> {
     const configuredBin = await getTmuxOption("@switchboard-bin");
-    const switchboardBin = configuredBin || process.argv[1] || "switchboard";
+    const switchboardBin = configuredBin || switchboardBinary();
     Bun.spawn([switchboardBin, "new-agent-popup", process.env["TMUX_PANE"] ?? ""], {
       stderr: "ignore",
       stdout: "ignore",
     });
   }
 
+  useEffect(() => {
+    let cancelled = false;
+    void getTmuxOption("@switchboard-sidebar-density").then((value) => {
+      const parsed = parseDensity(value);
+      if (!cancelled && parsed) {
+        setDensity(parsed);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useKeyboard((key) => {
     if (key.name === "q" || (key.ctrl && key.name === "c")) {
       renderer.destroy();
       process.exit(0);
+      return;
+    }
+
+    if (key.name === "[" || key.name === "]") {
+      setActiveTab((tab) => nextTab(tab, key.name === "[" ? -1 : 1, filterCwd !== null));
       return;
     }
 
@@ -129,14 +175,7 @@ export function SidebarApp({ filterCwd }: SidebarProps) {
     }
     if (key.name === "return") {
       const selected = visible[safeIndex];
-      if (selected) void focusAgent(selected).catch(() => {});
-      return;
-    }
-    if (key.name === "a") {
-      const selected = visible[safeIndex];
-      if (selected?.session) {
-        void attachAgentSession({ target: selected.session }).catch(() => {});
-      }
+      if (selected) void attachAgent(selected).catch(() => {});
       return;
     }
   });
@@ -180,31 +219,71 @@ export function SidebarApp({ filterCwd }: SidebarProps) {
 
   return (
     <box style={{ flexDirection: "column", padding: 1, flexGrow: 1 }}>
-      <Header connection={connection} filterCwd={filterCwd} />
+      <Header
+        connection={connection}
+        activeTab={activeTab}
+        filterCwd={filterCwd}
+      />
       <box style={{ flexDirection: "column", marginTop: 1, flexGrow: 1 }}>
         {visible.length === 0 ? (
-          <text fg="#665c54">no agents{filterCwd ? " in this cwd" : ""}</text>
+          <text fg="#665c54">no agents{activeFilterCwd ? " in this cwd" : ""}</text>
+        ) : activeTab === "all" ? (
+          groups.map((group) => (
+            <AgentGroupSection
+              key={group.cwd}
+              group={group}
+              selectedPaneId={selectedPaneId}
+              spacing={spacing}
+            />
+          ))
         ) : (
           visible.map((agent) => (
             <AgentRow
               key={agent.paneId}
               agent={agent}
               selected={agent.paneId === selectedPaneId}
+              spacing={spacing.row}
             />
           ))
         )}
       </box>
       {notice ? <text fg="#928374">{truncate(notice, 80)}</text> : null}
-      <text fg="#665c54">j/k · enter reveal · a attach · n new · q quit</text>
+      <text fg="#665c54">[/] tabs · j/k · enter attach · n new · q quit</text>
+    </box>
+  );
+}
+
+function AgentGroupSection({
+  group,
+  selectedPaneId,
+  spacing,
+}: {
+  readonly group: AgentGroup;
+  readonly selectedPaneId: string | null;
+  readonly spacing: SidebarSpacing;
+}) {
+  return (
+    <box style={{ flexDirection: "column", marginBottom: spacing.group }}>
+      <text fg="#665c54">{truncate(group.cwd, 72)}</text>
+      {group.agents.map((agent) => (
+        <AgentRow
+          key={agent.paneId}
+          agent={agent}
+          selected={agent.paneId === selectedPaneId}
+          spacing={spacing.row}
+        />
+      ))}
     </box>
   );
 }
 
 function Header({
   connection,
+  activeTab,
   filterCwd,
 }: {
   readonly connection: ConnectionState;
+  readonly activeTab: SidebarTab;
   readonly filterCwd: string | null;
 }) {
   if (connection.kind === "connecting") {
@@ -213,15 +292,40 @@ function Header({
   if (connection.kind === "error") {
     return <text fg="#fb4934">error: {connection.message}</text>;
   }
-  return <text fg="#928374">agents{filterCwd ? ` · ${filterCwd}` : ""}</text>;
+  return (
+    <box style={{ flexDirection: "column" }}>
+      <box style={{ flexDirection: "row" }}>
+        <TabLabel active={activeTab === "cwd"} label="cwd" disabled={!filterCwd} />
+        <text fg="#504945"> </text>
+        <TabLabel active={activeTab === "all"} label="all" disabled={false} />
+      </box>
+      {activeTab === "cwd" && filterCwd ? <text fg="#665c54">{truncate(filterCwd, 72)}</text> : null}
+    </box>
+  );
+}
+
+function TabLabel({
+  active,
+  disabled,
+  label,
+}: {
+  readonly active: boolean;
+  readonly disabled: boolean;
+  readonly label: string;
+}) {
+  const fg = disabled ? "#504945" : active ? "#ebdbb2" : "#928374";
+  const bg = active ? "#3c3836" : undefined;
+  return <text fg={fg} bg={bg}>{` ${label} `}</text>;
 }
 
 function AgentRow({
   agent,
   selected,
+  spacing = 1,
 }: {
   readonly agent: AgentState;
   readonly selected: boolean;
+  readonly spacing?: number;
 }) {
   const location =
     agent.session && agent.windowIndex >= 0 ? `${agent.session}:${agent.windowIndex}` : "";
@@ -236,7 +340,7 @@ function AgentRow({
     <box
       style={{
         flexDirection: "column",
-        marginBottom: 1,
+        marginBottom: spacing,
         paddingTop: 0,
         paddingBottom: 0,
         paddingLeft: 1,
@@ -268,4 +372,28 @@ function AgentRow({
 function truncate(value: string, max: number): string {
   if (value.length <= max) return value;
   return `${value.slice(0, max - 1)}…`;
+}
+
+function nextTab(current: SidebarTab, direction: -1 | 1, hasCwdTab: boolean): SidebarTab {
+  const tabs = hasCwdTab ? SIDEBAR_TABS : SIDEBAR_TABS.filter((tab) => tab !== "cwd");
+  const currentIndex = tabs.indexOf(current);
+  const safeIndex = currentIndex >= 0 ? currentIndex : 0;
+  return tabs[(safeIndex + direction + tabs.length) % tabs.length] ?? "all";
+}
+
+function groupAgentsByCwd(agents: readonly AgentState[]): readonly AgentGroup[] {
+  const groups = new Map<string, AgentState[]>();
+  for (const agent of agents) {
+    const cwd = agent.cwd || "(unknown cwd)";
+    const group = groups.get(cwd) ?? [];
+    group.push(agent);
+    groups.set(cwd, group);
+  }
+
+  return [...groups.entries()].map(([cwd, items]) => ({ cwd, agents: items }));
+}
+
+function parseDensity(value: string): SidebarDensity | null {
+  if (value === "dense" || value === "normal" || value === "loose") return value;
+  return null;
 }

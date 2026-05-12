@@ -8,6 +8,7 @@
 #                                       also the enforced minimum width
 #   @switchboard-sidebar-max-width     maximum sidebar width (default: unset)
 #                                       set to e.g. "48" to clamp the upper bound
+#   @switchboard-sidebar-density       dense | normal | loose (default: dense)
 #   @switchboard-bin                   path to the switchboard binary
 #                                       (default: "switchboard"). Used by every
 #                                       script that needs to invoke switchboard.

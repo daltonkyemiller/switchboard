@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { attachAgentSession } from "./attach.ts";
 import { createAgentSession } from "./new.ts";
 import { listInstalledAgentLaunchers, type AgentLauncher } from "../shared/agent-config.ts";
+import { ensureOpenTuiRuntime } from "../shared/opentui-runtime.ts";
 
 type NewAgentOptions = {
   readonly cwd: string;
@@ -148,6 +149,7 @@ function LauncherRow({
 }
 
 export async function runNewAgent(args: readonly string[]): Promise<void> {
+  await ensureOpenTuiRuntime();
   const renderer = await createCliRenderer();
   createRoot(renderer).render(<NewAgentApp options={parseOptions(args)} />);
 }

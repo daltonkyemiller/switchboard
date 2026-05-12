@@ -1,4 +1,5 @@
 import {
+  adjacentWorkingPane,
   findSidebar,
   largestWorkingPane,
   paneWindow,
@@ -46,31 +47,10 @@ async function runSwap(direction: "U" | "D", callerPane: string): Promise<void> 
   }
 
   if ((await workingPaneCount(windowId)) < 2) return;
-  const width = String(await sidebarWidth());
-  const result = await tmux([
-    "break-pane",
-    "-d",
-    "-s",
-    sidebar,
-    ";",
-    "swap-pane",
-    `-${direction}`,
-    "-t",
-    target,
-    ";",
-    "join-pane",
-    "-fhb",
-    "-l",
-    width,
-    "-s",
-    sidebar,
-    "-t",
-    target,
-    ";",
-    "select-pane",
-    "-t",
-    target,
-  ]);
+  const adjacent = await adjacentWorkingPane(windowId, target, direction === "U" ? "previous" : "next");
+  if (!adjacent) return;
+
+  const result = await tmux(["swap-pane", "-s", target, "-t", adjacent, ";", "select-pane", "-t", target]);
   if (!result.ok) {
     await message("switchboard: pane swap failed");
   }

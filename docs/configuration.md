@@ -279,6 +279,7 @@ set -g @switchboard-toggle-key "a"
 set -g @switchboard-toggle-key-no-prefix ""
 set -g @switchboard-sidebar-width "32"
 set -g @switchboard-sidebar-max-width ""
+set -g @switchboard-sidebar-density "dense"
 set -g @switchboard-router "on"
 set -g @switchboard-router-split-h "%"
 set -g @switchboard-router-split-v '"'
@@ -299,6 +300,7 @@ set -g @switchboard-new-agent-key-no-prefix ""
 | `@switchboard-toggle-key-no-prefix` | unset | Global key to toggle the sidebar |
 | `@switchboard-sidebar-width` | `32` | Sidebar width and enforced minimum |
 | `@switchboard-sidebar-max-width` | unset | Optional maximum sidebar width |
+| `@switchboard-sidebar-density` | `dense` | Sidebar spacing preset: `dense`, `normal`, or `loose` |
 | `@switchboard-router` | `on` | Route split/layout/swap keys so the sidebar stays anchored |
 | `@switchboard-router-split-h` | `%` | Routed horizontal split key |
 | `@switchboard-router-split-v` | `"` | Routed vertical split key |

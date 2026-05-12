@@ -38,8 +38,47 @@ export function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'"'"'`)}'`;
 }
 
+function tmuxOptionSync(name: string): string {
+  const result = Bun.spawnSync(["tmux", "show-options", "-gqv", name], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  if (result.exitCode !== 0) return "";
+  return new TextDecoder().decode(result.stdout).trim();
+}
+
+export function switchboardBinary(): string {
+  const configured = tmuxOptionSync("@switchboard-bin");
+  if (configured) return configured;
+
+  const argvPath = process.argv[1];
+  if (argvPath && !argvPath.startsWith("/$bunfs/")) return argvPath;
+
+  return "switchboard";
+}
+
 export function switchboardCommand(): string {
-  return shellQuote(process.argv[1] ?? "switchboard");
+  return shellQuote(switchboardBinary());
+}
+
+export function popupShellCommand(command: string, label: string): string {
+  const logFile = paths.popupLogFile;
+  const script = [
+    `mkdir -p ${shellQuote(dirname(logFile))}`,
+    `: > ${shellQuote(logFile)}`,
+    `${command} 2> ${shellQuote(logFile)}`,
+    `code=$?`,
+    `if [ "$code" -ne 0 ]; then`,
+    `  last=$(tail -n 1 ${shellQuote(logFile)} 2>/dev/null || true)`,
+    `  tmux display-message ${shellQuote(`${label} failed; see ${logFile}`)}`,
+    `  printf '\\n%s failed with exit %s\\nLog: %s\\n' ${shellQuote(label)} "$code" ${shellQuote(logFile)}`,
+    `  [ -n "$last" ] && printf 'Last line: %s\\n' "$last"`,
+    `  sleep 4`,
+    `  exit "$code"`,
+    `fi`,
+  ].join("\n");
+
+  return `sh -lc ${shellQuote(script)}`;
 }
 
 export async function tmuxOption(name: string): Promise<string> {
