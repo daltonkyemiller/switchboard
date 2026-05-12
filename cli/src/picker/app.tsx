@@ -8,6 +8,7 @@ import {
   type TreeSitterClient,
 } from "@opentui/core";
 import { createFinder, type Hit } from "./finder.ts";
+import { iconForPath, type FileIcon } from "./file-icons.ts";
 import { getHighlighter } from "./highlighter.ts";
 import { buildAbsPath, loadPreview, sliceAround, type PreviewContent } from "./preview.ts";
 import type { NvimContextSource } from "../shared/nvim-context.ts";
@@ -37,16 +38,6 @@ export function PickerApp({ cwd, targetPane, initialQuery = "", theme }: PickerP
     null,
   );
   const [highlighter, setHighlighter] = useState<TreeSitterClient | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void getHighlighter().then((client) => {
-      if (!cancelled) setHighlighter(client);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     return () => finderRef.current.destroy();
@@ -99,6 +90,18 @@ export function PickerApp({ cwd, targetPane, initialQuery = "", theme }: PickerP
       cancelled = true;
     };
   }, [hits, selected, cwd]);
+
+  useEffect(() => {
+    if (highlighter || !preview?.content.filetype) return;
+
+    let cancelled = false;
+    void getHighlighter().then((client) => {
+      if (!cancelled) setHighlighter(client);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [highlighter, preview?.content.filetype]);
 
   const exit = (code = 0) => {
     finderRef.current.destroy();
@@ -261,6 +264,7 @@ function Row({
   if (hit.kind === "file") {
     const dir = hit.path.slice(0, hit.path.length - hit.fileName.length);
     const badge = nvimBadge(hit.source);
+    const icon = theme.nerdFontIcons ? iconForPath(hit.path) : null;
     return (
       <box
         id={id}
@@ -276,6 +280,7 @@ function Row({
       >
         <text fg={pointerColor}>{pointer} </text>
         <Badge label={badge} theme={theme} selected={selected} />
+        <Icon icon={icon} />
         <PathText
           dir={dir}
           fileName={hit.fileName}
@@ -303,6 +308,7 @@ function Row({
     >
       <box style={{ flexDirection: "row", height: 1 }}>
         <text fg={pointerColor}>{pointer} </text>
+        <Icon icon={theme.nerdFontIcons ? iconForPath(hit.path) : null} />
         <text
           content={styledMatchText(
             [
@@ -398,12 +404,24 @@ function Badge({
 
   return (
     <text
-      content={` ${label} `}
-      fg={selected ? theme.colors.selectedBg : theme.colors.panelBg}
-      bg={theme.colors.accent}
+      content={`${label}  `}
+      fg={theme.colors.accent}
       wrapMode="none"
       truncate={true}
       style={{ width: 4, height: 1, flexShrink: 0 }}
+    />
+  );
+}
+
+function Icon({ icon }: { readonly icon: FileIcon | null }) {
+  if (!icon) return null;
+  return (
+    <text
+      content={`${icon.glyph} `}
+      fg={icon.color}
+      wrapMode="none"
+      truncate={true}
+      style={{ width: 3, height: 1, flexShrink: 0 }}
     />
   );
 }

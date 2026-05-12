@@ -24,6 +24,7 @@ export type PickerColors = {
 export type PickerTheme = {
   readonly colors: PickerColors;
   readonly syntaxStyle: SyntaxStyle;
+  readonly nerdFontIcons: boolean;
 };
 
 type TextMateTheme = {
@@ -251,6 +252,7 @@ export async function loadPickerTheme(): Promise<PickerTheme> {
   const parsed: unknown = raw.trim().length > 0 ? Bun.TOML.parse(raw) : {};
   const root = isRecord(parsed) ? parsed : {};
   const picker = isRecord(root["picker"]) ? root["picker"] : {};
+  const nerdFontIcons = asBoolean(picker["nerd_font_icons"]) ?? true;
   const colors = { ...DEFAULT_COLORS, ...parsePickerColors(picker["theme"]) };
   const syntaxConfig = isRecord(picker["syntax"]) ? picker["syntax"] : {};
   const themeFile = asString(syntaxConfig["theme_file"]);
@@ -264,5 +266,6 @@ export async function loadPickerTheme(): Promise<PickerTheme> {
   return {
     colors,
     syntaxStyle: SyntaxStyle.fromStyles(syntaxStyles),
+    nerdFontIcons,
   };
 }

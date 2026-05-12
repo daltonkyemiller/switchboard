@@ -1,6 +1,6 @@
-import { createCliRenderer } from "@opentui/core";
-import { createRoot, useKeyboard, useRenderer } from "@opentui/react";
-import { useEffect, useMemo, useState } from "react";
+import { createCliRenderer, type ScrollBoxRenderable } from "@opentui/core";
+import { createRoot, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { attachAgentSession } from "./attach.ts";
 import { createAgentSession } from "./new.ts";
 import { listInstalledAgentLaunchers, type AgentLauncher } from "../shared/agent-config.ts";
@@ -85,6 +85,8 @@ async function createAndAttachAgent(launcher: AgentLauncher, options: AgentPicke
 
 function AgentPickerApp({ options }: { readonly options: AgentPickerOptions }) {
   const renderer = useRenderer();
+  const terminal = useTerminalDimensions();
+  const resultsRef = useRef<ScrollBoxRenderable | null>(null);
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [tab, setTab] = useState<PickerTab>("cwd");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -120,14 +122,39 @@ function AgentPickerApp({ options }: { readonly options: AgentPickerOptions }) {
       .sort((a, b) => b.updatedAt - a.updatedAt);
 
     return [
-      ...visibleAgents.map((agent): PickerRow => ({ kind: "agent", agent })),
       ...launchers.map((launcher): PickerRow => ({ kind: "create", launcher })),
+      ...visibleAgents.map((agent): PickerRow => ({ kind: "agent", agent })),
     ];
   }, [state, options.cwd, tab]);
+  const resultsHeight = Math.max(1, terminal.height - (message ? 7 : 6));
 
   useEffect(() => {
     setSelectedIndex((index) => Math.min(index, Math.max(rows.length - 1, 0)));
   }, [rows.length]);
+
+  useEffect(() => {
+    resultsRef.current?.scrollTo(0);
+  }, [tab, options.cwd, rows.length]);
+
+  useEffect(() => {
+    const results = resultsRef.current;
+    if (!results) return;
+
+    const rowHeight = 3;
+    const selectedTop = selectedIndex * rowHeight;
+    const selectedBottom = selectedTop + rowHeight;
+    const viewportTop = results.scrollTop;
+    const viewportBottom = viewportTop + resultsHeight;
+
+    if (selectedTop < viewportTop) {
+      results.scrollTo(selectedTop);
+      return;
+    }
+
+    if (selectedBottom > viewportBottom) {
+      results.scrollTo(selectedBottom - resultsHeight);
+    }
+  }, [selectedIndex, resultsHeight]);
 
   function close(): void {
     renderer.destroy();
@@ -181,16 +208,27 @@ function AgentPickerApp({ options }: { readonly options: AgentPickerOptions }) {
 
   return (
     <box style={{ flexDirection: "column", padding: 1, flexGrow: 1, backgroundColor: "#1d2021" }}>
-      <box style={{ flexDirection: "row" }}>
+      <box style={{ flexDirection: "row", height: 1, flexShrink: 0 }}>
         <TabLabel active={tab === "cwd"} label="cwd" />
-        <text fg="#504945"> </text>
+        <SingleLineText content=" " fg="#504945" width={1} />
         <TabLabel active={tab === "all"} label="all" />
       </box>
-      <text fg="#665c54">{truncate(options.cwd, 72)}</text>
-      <box style={{ flexDirection: "column", marginTop: 1, flexGrow: 1 }}>
-        {state.kind === "loading" ? <text fg="#928374">loading agents</text> : null}
-        {state.kind === "error" ? <text fg="#fb4934">{state.message}</text> : null}
-        {state.kind !== "loading" && rows.length === 0 ? <text fg="#928374">no agents or integrations</text> : null}
+      <SingleLineText content={truncate(options.cwd, 72)} fg="#665c54" />
+      <scrollbox
+        ref={resultsRef}
+        scrollY={true}
+        scrollX={false}
+        focusable={false}
+        viewportCulling={true}
+        verticalScrollbarOptions={{ visible: false }}
+        horizontalScrollbarOptions={{ visible: false }}
+        style={{ flexDirection: "column", marginTop: 1, height: resultsHeight, flexShrink: 1 }}
+      >
+        {state.kind === "loading" ? <SingleLineText content="loading agents" fg="#928374" /> : null}
+        {state.kind === "error" ? <SingleLineText content={state.message} fg="#fb4934" /> : null}
+        {state.kind !== "loading" && rows.length === 0 ? (
+          <SingleLineText content="no agents or integrations" fg="#928374" />
+        ) : null}
         {rows.map((row, index) => (
           <PickerResultRow
             key={rowKey(row)}
@@ -198,15 +236,24 @@ function AgentPickerApp({ options }: { readonly options: AgentPickerOptions }) {
             selected={index === selectedIndex}
           />
         ))}
-      </box>
-      {message ? <text fg="#928374">{truncate(message, 72)}</text> : null}
-      <text fg="#665c54">[/] tabs · j/k select · enter attach/create · q close</text>
+      </scrollbox>
+      {message ? <SingleLineText content={truncate(message, 72)} fg="#928374" /> : null}
+      <SingleLineText content="[/] tabs · j/k select · enter attach/create · q close" fg="#665c54" />
     </box>
   );
 }
 
 function TabLabel({ active, label }: { readonly active: boolean; readonly label: string }) {
-  return <text fg={active ? "#ebdbb2" : "#928374"} bg={active ? "#3c3836" : undefined}>{` ${label} `}</text>;
+  return (
+    <text
+      content={` ${label} `}
+      fg={active ? "#ebdbb2" : "#928374"}
+      bg={active ? "#3c3836" : undefined}
+      wrapMode="none"
+      truncate={true}
+      style={{ height: 1, width: label.length + 2, flexShrink: 0 }}
+    />
+  );
 }
 
 function PickerResultRow({
@@ -222,32 +269,53 @@ function PickerResultRow({
 
   if (row.kind === "agent") {
     return (
-      <box style={{ flexDirection: "column", marginBottom: 1 }}>
-        <box style={{ flexDirection: "row" }}>
-          <text fg={pointerColor}>{pointer} </text>
-          <text fg={nameColor}>{row.agent.tool} </text>
-          <text fg="#928374">{row.agent.status}</text>
+      <box style={{ flexDirection: "column", height: 3 }}>
+        <box style={{ flexDirection: "row", height: 1 }}>
+          <SingleLineText content={`${pointer} `} fg={pointerColor} width={2} />
+          <SingleLineText content={`${row.agent.tool} `} fg={nameColor} width={12} />
+          <SingleLineText content={row.agent.status} fg="#928374" />
         </box>
-        <box style={{ flexDirection: "row", paddingLeft: 3 }}>
-          <text fg="#665c54">{truncate(`${row.agent.session} · ${row.agent.cwd}`, 68)}</text>
+        <box style={{ flexDirection: "row", height: 1, paddingLeft: 3 }}>
+          <SingleLineText content={truncate(`${row.agent.session} · ${row.agent.cwd}`, 68)} fg="#665c54" />
         </box>
       </box>
     );
   }
 
   return (
-    <box style={{ flexDirection: "column", marginBottom: 1 }}>
-      <box style={{ flexDirection: "row" }}>
-        <text fg={pointerColor}>{pointer} </text>
-        <text fg="#8ec07c">new </text>
-        <text fg={nameColor}>{row.launcher.tool}</text>
+    <box style={{ flexDirection: "column", height: 3 }}>
+      <box style={{ flexDirection: "row", height: 1 }}>
+        <SingleLineText content={`${pointer} `} fg={pointerColor} width={2} />
+        <SingleLineText content="new " fg="#8ec07c" width={4} />
+        <SingleLineText content={row.launcher.tool} fg={nameColor} />
       </box>
-      <box style={{ flexDirection: "row", paddingLeft: 3 }}>
-        <text fg={row.launcher.configured ? "#8ec07c" : "#665c54"}>
-          {truncate(row.launcher.displayCommand, 68)}
-        </text>
+      <box style={{ flexDirection: "row", height: 1, paddingLeft: 3 }}>
+        <SingleLineText
+          content={truncate(row.launcher.displayCommand, 68)}
+          fg={row.launcher.configured ? "#8ec07c" : "#665c54"}
+        />
       </box>
     </box>
+  );
+}
+
+function SingleLineText({
+  content,
+  fg,
+  width,
+}: {
+  readonly content: string;
+  readonly fg: string;
+  readonly width?: number;
+}) {
+  return (
+    <text
+      content={content}
+      fg={fg}
+      wrapMode="none"
+      truncate={true}
+      style={{ height: 1, width, flexShrink: width ? 0 : 1 }}
+    />
   );
 }
 

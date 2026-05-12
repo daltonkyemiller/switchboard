@@ -25,6 +25,9 @@ args = []
 command = "opencode"
 args = []
 
+[picker]
+nerd_font_icons = true
+
 [picker.theme]
 dim_fg = "ansi:8"
 prompt_fg = "ansi:3"
@@ -134,6 +137,12 @@ set -g @switchboard-agent-picker-key "C"
 ```
 
 ### Picker Theme
+
+`[picker]` controls general picker behavior.
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `nerd_font_icons` | `true` | Show Nerd Font file icons in picker result rows. Set to `false` to disable |
 
 `[picker.theme]` controls picker UI colors.
 
