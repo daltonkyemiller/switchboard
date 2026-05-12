@@ -2,20 +2,21 @@ import {
   adjacentWorkingPane,
   findSidebar,
   largestWorkingPane,
+  paneRole,
   paneWindow,
   resolveCallerPane,
   sidebarWidth,
   targetForAction,
   workingPaneCount,
 } from "../shared/tmux-pane.ts";
-import { tmux } from "../shared/tmux.ts";
+import { agentTmux, tmux } from "../shared/tmux.ts";
 
-type RouterAction = "split-h" | "split-v" | "next-layout" | "swap-prev" | "swap-next";
+type RouterAction = "split-h" | "split-v" | "next-layout" | "swap-prev" | "swap-next" | "passthrough";
 
 const LAYOUTS = ["even-horizontal", "even-vertical", "main-horizontal", "main-vertical", "tiled"] as const;
 
 function isRouterAction(value: string): value is RouterAction {
-  return value === "split-h" || value === "split-v" || value === "next-layout" || value === "swap-prev" || value === "swap-next";
+  return value === "split-h" || value === "split-v" || value === "next-layout" || value === "swap-prev" || value === "swap-next" || value === "passthrough";
 }
 
 async function message(text: string): Promise<void> {
@@ -116,10 +117,33 @@ async function runNextLayout(callerPane: string): Promise<void> {
   await message(`switchboard: ${layout} @ ${windowId}`);
 }
 
+async function runPassthrough(callerPane: string, key: string | undefined): Promise<void> {
+  if (!key) {
+    await message("switchboard: no passthrough key");
+    return;
+  }
+
+  if ((await paneRole(callerPane)) !== "viewer") {
+    await message("switchboard: passthrough only applies to agent viewer panes");
+    return;
+  }
+
+  const prefix = await agentTmux(["show-options", "-gqv", "prefix"]);
+  if (!prefix.ok || !prefix.stdout || prefix.stdout === "None") {
+    await message("switchboard: agent tmux prefix is disabled");
+    return;
+  }
+
+  const result = await tmux(["send-keys", "-t", callerPane, prefix.stdout, key]);
+  if (!result.ok) {
+    await message("switchboard: passthrough failed");
+  }
+}
+
 export async function runRouter(args: readonly string[]): Promise<void> {
-  const [action, bindingPane] = args;
+  const [action, bindingPane, key] = args;
   if (!action || !isRouterAction(action)) {
-    console.error("usage: switchboard router <split-h|split-v|next-layout|swap-prev|swap-next> [pane]");
+    console.error("usage: switchboard router <split-h|split-v|next-layout|swap-prev|swap-next|passthrough> [pane] [key]");
     process.exit(1);
   }
 
@@ -142,6 +166,9 @@ export async function runRouter(args: readonly string[]): Promise<void> {
       return;
     case "next-layout":
       await runNextLayout(callerPane);
+      return;
+    case "passthrough":
+      await runPassthrough(callerPane, key);
       return;
   }
 }

@@ -21,8 +21,6 @@ export async function attachAgentSession(options: AttachOptions): Promise<string
     throw new Error(`session not found: ${options.target}`);
   }
   await Promise.all([
-    agentTmux(["set-option", "-t", options.target, "-q", "prefix", "None"]),
-    agentTmux(["set-option", "-t", options.target, "-q", "prefix2", "None"]),
     agentTmux([
       "bind-key",
       "-n",

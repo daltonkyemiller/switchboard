@@ -137,8 +137,6 @@ export async function createAgentSession(
 
   await Promise.all([
     agentTmux(["set-option", "-t", sessionName, "-q", "status", "off"]),
-    agentTmux(["set-option", "-t", sessionName, "-q", "prefix", "None"]),
-    agentTmux(["set-option", "-t", sessionName, "-q", "prefix2", "None"]),
     agentTmux(["set-option", "-t", sessionName, "-q", "@switchboard_role", "agent"]),
     agentTmux(["set-option", "-t", sessionName, "-q", "@switchboard_tool", options.tool]),
     agentTmux(["set-option", "-t", sessionName, "-q", "@switchboard_cwd", cwd]),

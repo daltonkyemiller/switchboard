@@ -24,7 +24,7 @@ export const paths = {
   stateDir,
   runtimeDir,
   configFile: join(configDir, "config.toml"),
-  agentTmuxConfigFile: join(configDir, "agent-tmux.conf"),
+  agentTmuxConfigFile: join(configDir, "switchboard.conf"),
   grammarsFile: join(configDir, "grammars.toml"),
   grammarsDir: join(dataDir, "grammars"),
   socket: join(runtimeDir, "switchboard.sock"),

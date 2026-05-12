@@ -4,7 +4,7 @@ import { attachAgentSession } from "../commands/attach.ts";
 import { connect, type Client } from "../shared/client.ts";
 import type { Event } from "../shared/protocol.ts";
 import type { AgentState, AgentStatus } from "../shared/state.ts";
-import { agentTmux, switchboardBinary, tmux } from "../shared/tmux.ts";
+import { agentTmux, reloadAgentTmuxConfig, switchboardBinary, tmux } from "../shared/tmux.ts";
 import {
   attachedAgentSessions,
   paneValue,
@@ -232,6 +232,17 @@ export function SidebarApp({ filterCwd }: SidebarProps) {
       return;
     }
 
+    if (key.name === "r") {
+      void reloadAgentTmuxConfig()
+        .then((result) => {
+          setNotice(result.ok ? `reloaded ${result.configPath}` : result.stderr || "reload failed");
+        })
+        .catch((error) => {
+          setNotice(error instanceof Error ? error.message : "reload failed");
+        });
+      return;
+    }
+
     if (visible.length === 0) return;
 
     const currentIndex = visible.findIndex((a) => a.paneId === selectedPaneId);
@@ -407,7 +418,7 @@ export function SidebarApp({ filterCwd }: SidebarProps) {
         )}
       </box>
       {notice ? <text fg="#928374">{truncate(notice, 80)}</text> : null}
-      <text fg="#665c54">[/] tabs · j/k · enter attach · f follow · d detach · x kill · n new · q quit</text>
+      <text fg="#665c54">[/] tabs · j/k · enter attach · f follow · d detach · x kill · n new · r reload · q quit</text>
     </box>
   );
 }

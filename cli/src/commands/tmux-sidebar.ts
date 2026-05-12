@@ -55,7 +55,7 @@ export async function runSidebarToggle(args: readonly string[]): Promise<void> {
   }
 
   const width = String(await numericOption("@switchboard-sidebar-width", 32));
-  const command = (await tmuxOption("@switchboard-command")) || `${switchboardCommand()} sidebar`;
+  const command = `${switchboardCommand()} sidebar`;
   const created = await tmux([
     "split-window",
     "-fhb",

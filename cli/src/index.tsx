@@ -1,4 +1,5 @@
 import { runAgentPicker } from "./commands/agent-picker.tsx";
+import { runAgentTmux } from "./commands/agent-tmux.ts";
 import { runAgentToggle } from "./commands/agent-toggle.ts";
 import { runAttach } from "./commands/attach.ts";
 import { runDaemon } from "./commands/daemon.ts";
@@ -25,6 +26,7 @@ usage:
   switchboard new-agent [--cwd PATH]                picker for spawning installed agents
   switchboard agent-picker [--cwd PATH]             picker for attaching or creating agents
   switchboard agent-picker-popup [pane]             tmux popup wrapper for agent-picker
+  switchboard agent-tmux reload                     reload the private agent tmux server config
   switchboard agent-toggle [pane]                   toggle last cwd agent or open agent-picker
   switchboard new-agent-popup [pane]                tmux popup wrapper for new-agent
   switchboard attach <session>                      open a viewer pane that attaches to an agent
@@ -33,7 +35,7 @@ usage:
   switchboard pick-agent --session SESSION          internal: open picker from agent tmux server
   switchboard sidebar-toggle [pane]                 toggle sidebar in the current window
   switchboard sidebar-enforce-width                 clamp sidebar width from tmux hooks
-  switchboard router <action> [pane]                routed tmux split/layout/swap actions
+  switchboard router <action> [pane]                routed tmux split/layout/swap/passthrough actions
   switchboard grammar list|add                      manage picker Tree-sitter grammars
   switchboard list [--cwd PATH]                     list tracked agents
   switchboard watch                                 stream agent events
@@ -78,6 +80,9 @@ async function main(): Promise<void> {
       return;
     case "agent-picker-popup":
       await runAgentPickerPopup(rest);
+      return;
+    case "agent-tmux":
+      await runAgentTmux(rest);
       return;
     case "agent-toggle":
       await runAgentToggle(rest);

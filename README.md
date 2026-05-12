@@ -16,8 +16,14 @@ The main config file is:
 Related config files:
 
 - `~/.config/switchboard/grammars.toml` for user-installed Tree-sitter grammars.
-- `~/.config/switchboard/agent-tmux.conf` for the dedicated agent tmux server.
+- `~/.config/switchboard/switchboard.conf` for the dedicated agent tmux server.
 - tmux `@switchboard-*` options in your normal tmux config for plugin keybindings and sidebar behavior.
+
+After editing `switchboard.conf`, reload the running agent tmux server with:
+
+```sh
+switchboard agent-tmux reload
+```
 
 ## Neovim Companion
 

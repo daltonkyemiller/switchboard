@@ -293,12 +293,12 @@ The picker uses this to rank the current file, alternate file, open buffers,
 and recent files ahead of normal file search results. The picker still works
 normally when no Neovim context exists.
 
-## `agent-tmux.conf`
+## `switchboard.conf`
 
-Path: `~/.config/switchboard/agent-tmux.conf`
+Path: `~/.config/switchboard/switchboard.conf`
 
 Switchboard runs agent sessions on a separate tmux server at
-`$XDG_RUNTIME_DIR/switchboard/agent-tmux.sock`. If `agent-tmux.conf` exists,
+`$XDG_RUNTIME_DIR/switchboard/agent-tmux.sock`. If `switchboard.conf` exists,
 Switchboard starts that server with this config. Otherwise it writes a generated
 minimal config under `$XDG_STATE_HOME/switchboard/agent-tmux.generated.conf`.
 
@@ -306,10 +306,11 @@ The generated config is intentionally sparse:
 
 ```tmux
 set -g default-command "${SHELL}"
-set -g prefix None
+set -g prefix C-b
 set -g prefix2 None
-unbind-key -a
-unbind-key -a -T root
+unbind-key -aq
+unbind-key -aq -T root
+bind-key [ copy-mode
 set -g status off
 set -g mouse off
 set -g pane-border-status off
@@ -318,9 +319,17 @@ set -g focus-events on
 set -g default-terminal "tmux-256color"
 ```
 
-Use `agent-tmux.conf` when you want a custom minimal agent-server environment.
+Use `switchboard.conf` when you want a custom minimal agent-server environment.
 Avoid sourcing your normal `~/.tmux.conf` here unless you explicitly want those
 bindings inside nested agent sessions.
+
+Reload the running agent tmux server after editing the config with:
+
+```sh
+switchboard agent-tmux reload
+```
+
+The sidebar also exposes this as `r`.
 
 ## tmux Plugin Options
 
@@ -329,7 +338,6 @@ They are tmux options, not `config.toml` keys.
 
 ```tmux
 set -g @switchboard-bin "switchboard"
-set -g @switchboard-command "switchboard sidebar"
 set -g @switchboard-toggle-key "a"
 set -g @switchboard-toggle-key-no-prefix ""
 set -g @switchboard-sidebar-width "32"
@@ -341,6 +349,7 @@ set -g @switchboard-router-split-v '"'
 set -g @switchboard-router-next-layout "Space"
 set -g @switchboard-router-swap-prev "{"
 set -g @switchboard-router-swap-next "}"
+set -g @switchboard-passthrough-keys "["
 set -g @switchboard-picker-key ""
 set -g @switchboard-picker-key-no-prefix ""
 set -g @switchboard-new-agent-key ""
@@ -354,7 +363,6 @@ set -g @switchboard-agent-toggle-key-no-prefix ""
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `@switchboard-bin` | `switchboard` | Binary used by plugin scripts |
-| `@switchboard-command` | `<@switchboard-bin> sidebar` | Command run inside the sidebar pane |
 | `@switchboard-toggle-key` | unset | Prefix-table key to toggle the sidebar |
 | `@switchboard-toggle-key-no-prefix` | unset | Global key to toggle the sidebar |
 | `@switchboard-sidebar-width` | `32` | Sidebar width and enforced minimum |
@@ -366,6 +374,7 @@ set -g @switchboard-agent-toggle-key-no-prefix ""
 | `@switchboard-router-next-layout` | `Space` | Routed layout-cycle key |
 | `@switchboard-router-swap-prev` | `{` | Routed `swap-pane -U` key |
 | `@switchboard-router-swap-next` | `}` | Routed `swap-pane -D` key |
+| `@switchboard-passthrough-keys` | `[` | Space-separated prefix-table keys routed into the agent tmux server when the active pane is a switchboard viewer. In non-viewer panes, Switchboard runs the parent tmux binding that existed before Switchboard rebound the key |
 | `@switchboard-picker-key` | unset | Prefix-table picker key |
 | `@switchboard-picker-key-no-prefix` | unset | Global picker key |
 | `@switchboard-new-agent-key` | unset | Prefix-table new-agent popup key |

@@ -11,10 +11,11 @@ export type TmuxResult = {
 const SAFE_ARG = /^[a-zA-Z0-9_\/=:.@%+,-]+$/;
 
 const DEFAULT_AGENT_TMUX_CONFIG = `set -g default-command "\${SHELL}"
-set -g prefix None
+set -g prefix C-b
 set -g prefix2 None
-unbind-key -a
-unbind-key -a -T root
+unbind-key -aq
+unbind-key -aq -T root
+bind-key [ copy-mode
 set -g status off
 set -g mouse off
 set -g pane-border-status off
@@ -127,4 +128,25 @@ export async function agentTmux(args: readonly string[]): Promise<TmuxResult> {
   await mkdir(dirname(paths.agentTmuxSocket), { recursive: true });
   await cleanupAgentTmuxSocket();
   return tmux(["-S", paths.agentTmuxSocket, "-f", config, ...args]);
+}
+
+export async function reloadAgentTmuxConfig(): Promise<TmuxResult & { readonly configPath: string }> {
+  const configPath = await ensureAgentTmuxConfig();
+  const result = await agentTmux(["source-file", configPath]);
+  if (!result.ok) return { ...result, configPath };
+
+  const sessions = await agentTmux(["list-sessions", "-F", "#{session_name}"]);
+  if (sessions.ok) {
+    await Promise.all(
+      sessions.stdout
+        .split("\n")
+        .filter(Boolean)
+        .flatMap((session) => [
+          agentTmux(["set-option", "-u", "-t", session, "prefix"]),
+          agentTmux(["set-option", "-u", "-t", session, "prefix2"]),
+        ]),
+    );
+  }
+
+  return { ...result, configPath };
 }

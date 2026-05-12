@@ -12,11 +12,8 @@
 #   @switchboard-bin                   path to the switchboard binary
 #                                       (default: "switchboard"). Used by every
 #                                       script that needs to invoke switchboard.
-#   @switchboard-command               override the sidebar command. Defaults to
-#                                       "<@switchboard-bin> sidebar". Only set if
-#                                       you need custom flags or a different cmd.
 #   @switchboard-router                "on" | "off" (default: on)
-#                                       when on, rebinds split/layout/cycle
+#                                       when on, rebinds split/layout/cycle/passthrough
 #                                       keys to route through switchboard router
 #                                       so the sidebar stays anchored.
 #   @switchboard-router-split-h        key bound to horizontal split  (default: %)
@@ -24,6 +21,8 @@
 #   @switchboard-router-next-layout    key bound to next-layout       (default: Space)
 #   @switchboard-router-swap-prev      key bound to swap-pane -U      (default: {)
 #   @switchboard-router-swap-next      key bound to swap-pane -D      (default: })
+#   @switchboard-passthrough-keys      prefix-table keys routed into agent panes
+#                                       (default: [)
 #   @switchboard-picker-key            key (prefix-table) for the picker popup
 #   @switchboard-picker-key-no-prefix  key (no-prefix) for the picker popup
 #   @switchboard-new-agent-key         key (prefix-table) for new-agent popup
@@ -51,13 +50,13 @@ toggle_key=$(tmux_option_or_default "@switchboard-toggle-key" "")
 toggle_key_no_prefix=$(tmux_option_or_default "@switchboard-toggle-key-no-prefix" "")
 sidebar_width=$(tmux_option_or_default "@switchboard-sidebar-width" "32")
 switchboard_bin=$(tmux_option_or_default "@switchboard-bin" "switchboard")
-sidebar_command=$(tmux_option_or_default "@switchboard-command" "$switchboard_bin sidebar")
 router_enabled=$(tmux_option_or_default "@switchboard-router" "on")
 router_split_h=$(tmux_option_or_default "@switchboard-router-split-h" "%")
 router_split_v=$(tmux_option_or_default "@switchboard-router-split-v" '"')
 router_next_layout=$(tmux_option_or_default "@switchboard-router-next-layout" "Space")
 router_swap_prev=$(tmux_option_or_default "@switchboard-router-swap-prev" "{")
 router_swap_next=$(tmux_option_or_default "@switchboard-router-swap-next" "}")
+passthrough_keys=$(tmux_option_or_default "@switchboard-passthrough-keys" "[")
 picker_key=$(tmux_option_or_default "@switchboard-picker-key" "")
 picker_key_no_prefix=$(tmux_option_or_default "@switchboard-picker-key-no-prefix" "")
 new_agent_key=$(tmux_option_or_default "@switchboard-new-agent-key" "")
@@ -91,6 +90,27 @@ if [[ "$router_enabled" == "on" ]]; then
   tmux bind-key "$router_next_layout" run-shell "$switchboard_cmd router next-layout #{pane_id}"
   tmux bind-key "$router_swap_prev"   run-shell "$switchboard_cmd router swap-prev #{pane_id}"
   tmux bind-key "$router_swap_next"   run-shell "$switchboard_cmd router swap-next #{pane_id}"
+
+  for passthrough_key in $passthrough_keys; do
+    fallback=$(tmux list-keys -T prefix "$passthrough_key" 2>/dev/null | sed -E 's/^bind-key -T prefix +([^ ]+|"[^"]+") +//')
+    if [[ "$fallback" == *"switchboard"* && "$fallback" == *"router passthrough"* ]]; then
+      fallback=""
+    fi
+    if [[ -z "$fallback" && "$passthrough_key" == "[" ]]; then
+      fallback="copy-mode"
+    fi
+
+    passthrough_invocation="$switchboard_cmd router passthrough #{pane_id} $(shell_quote "$passthrough_key")"
+    if [[ -n "$fallback" ]]; then
+      tmux bind-key "$passthrough_key" if -F '#{==:#{@switchboard_role},viewer}' \
+        "run-shell \"$passthrough_invocation\"" \
+        "$fallback"
+    else
+      tmux bind-key "$passthrough_key" if -F '#{==:#{@switchboard_role},viewer}' \
+        "run-shell \"$passthrough_invocation\"" \
+        "display-message 'switchboard: no fallback binding for $passthrough_key'"
+    fi
+  done
 fi
 
 picker_invocation="$switchboard_cmd pick-popup #{pane_id}"
