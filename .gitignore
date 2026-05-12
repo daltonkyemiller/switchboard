@@ -1,8 +1,10 @@
 node_modules
 
-.agents
-!.agents/skills/opentui
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/opentui/
+!.agents/skills/opentui/**
 
-.claude
-!.claude/skills/opentui
-
+.claude/*
+!.claude/skills
