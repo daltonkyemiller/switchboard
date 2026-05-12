@@ -1,6 +1,6 @@
 import { agentTmux, tmux } from "../shared/tmux.ts";
-
-type TmuxServer = "agent" | "outer";
+import { paths } from "../shared/paths.ts";
+import type { TmuxServer } from "../shared/state.ts";
 
 type PaneInfo = {
   readonly paneId: string;
@@ -53,6 +53,15 @@ export async function listPanes(): Promise<readonly PaneInfo[] | null> {
   const outerPanes = await listPanesFor("outer");
   if (agentPanes === null && outerPanes === null) return null;
   return [...(agentPanes ?? []), ...(outerPanes ?? [])];
+}
+
+export async function listOuterPanes(): Promise<readonly PaneInfo[] | null> {
+  return listPanesFor("outer");
+}
+
+export async function isAgentTmuxServerAlive(): Promise<boolean> {
+  const result = await tmux(["-S", paths.agentTmuxSocket, "display-message", "-p", "switchboard"]);
+  return result.ok;
 }
 
 export async function paneInfo(

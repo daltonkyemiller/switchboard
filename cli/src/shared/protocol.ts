@@ -1,4 +1,4 @@
-import type { AgentState, AgentStatus, Tool } from "./state.ts";
+import type { AgentState, AgentStatus, TmuxServer, Tool } from "./state.ts";
 
 export type ReportAgentParams = {
   readonly pane_id: string;
@@ -6,7 +6,7 @@ export type ReportAgentParams = {
   readonly agent: Tool;
   readonly state: AgentStatus;
   readonly seq: number;
-  readonly tmux_server?: "agent" | "outer";
+  readonly tmux_server?: TmuxServer;
   readonly pid?: number;
   readonly prompt_preview?: string;
   readonly cwd?: string;

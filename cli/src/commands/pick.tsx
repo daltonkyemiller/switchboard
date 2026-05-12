@@ -1,7 +1,7 @@
-import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { PickerApp } from "../picker/app.tsx";
 import { loadPickerTheme } from "../picker/theme.ts";
+import { createSwitchboardRenderer } from "../shared/opentui-renderer.ts";
 import { ensureOpenTuiRuntime } from "../shared/opentui-runtime.ts";
 import { popupShellCommand, shellQuote, switchboardCommand, tmux } from "../shared/tmux.ts";
 
@@ -20,7 +20,7 @@ export async function runPick(args: readonly string[]): Promise<void> {
 
   await ensureOpenTuiRuntime();
   const theme = await loadPickerTheme();
-  const renderer = await createCliRenderer();
+  const renderer = await createSwitchboardRenderer();
   createRoot(renderer).render(
     <PickerApp cwd={cwd} targetPane={target} initialQuery={initialQuery} theme={theme} />,
   );

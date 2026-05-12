@@ -1,10 +1,10 @@
-import { createCliRenderer } from "@opentui/core";
 import { createRoot, useKeyboard, useRenderer } from "@opentui/react";
 import { useEffect, useState } from "react";
 import { attachAgentSession } from "./attach.ts";
 import { createAgentSession } from "./new.ts";
 import { listInstalledAgentLaunchers, type AgentLauncher } from "../shared/agent-config.ts";
 import { ensureOpenTuiRuntime } from "../shared/opentui-runtime.ts";
+import { createSwitchboardRenderer } from "../shared/opentui-renderer.ts";
 
 type NewAgentOptions = {
   readonly cwd: string;
@@ -103,9 +103,8 @@ function NewAgentApp({ options }: { readonly options: NewAgentOptions }) {
 
   return (
     <box style={{ flexDirection: "column", padding: 1, flexGrow: 1, backgroundColor: "#1d2021" }}>
-      <text fg="#fabd2f">new agent</text>
       <text fg="#665c54">{truncate(options.cwd, 72)}</text>
-      <box style={{ flexDirection: "column", marginTop: 1, flexGrow: 1 }}>
+      <box style={{ flexDirection: "column", marginTop: 1 }}>
         {state.kind === "loading" ? <text fg="#928374">loading integrations</text> : null}
         {state.kind === "error" ? <text fg="#fb4934">{state.message}</text> : null}
         {state.kind === "ready" && launchers.length === 0 ? (
@@ -150,6 +149,6 @@ function LauncherRow({
 
 export async function runNewAgent(args: readonly string[]): Promise<void> {
   await ensureOpenTuiRuntime();
-  const renderer = await createCliRenderer();
+  const renderer = await createSwitchboardRenderer();
   createRoot(renderer).render(<NewAgentApp options={parseOptions(args)} />);
 }

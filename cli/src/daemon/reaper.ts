@@ -1,5 +1,5 @@
 import { snapshot, remove } from "./store.ts";
-import { listPanes } from "./tmux.ts";
+import { isAgentTmuxServerAlive, listOuterPanes, listPanes } from "./tmux.ts";
 
 const PROCESS_TICK_MS = 1_000;
 const TMUX_TICK_MS = 3_000;
@@ -24,8 +24,25 @@ function sweepProcesses(): void {
 }
 
 async function sweepPanes(): Promise<void> {
+  const isAgentServerAlive = await isAgentTmuxServerAlive();
+  if (!isAgentServerAlive) {
+    for (const state of snapshot()) {
+      if (state.tmuxServer === "agent") {
+        remove(state.paneId);
+      }
+    }
+    const outerPanes = await listOuterPanes();
+    if (outerPanes === null) return;
+    sweepMissingPanes(outerPanes);
+    return;
+  }
+
   const panes = await listPanes();
   if (panes === null) return;
+  sweepMissingPanes(panes);
+}
+
+function sweepMissingPanes(panes: readonly { readonly paneId: string }[]): void {
   const live = new Set(panes.map((p) => p.paneId));
   for (const state of snapshot()) {
     if (!live.has(state.paneId)) {

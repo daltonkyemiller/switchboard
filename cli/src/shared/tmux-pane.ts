@@ -58,18 +58,39 @@ export async function resolveCallerPane(bindingPane: string | null): Promise<str
 }
 
 export async function viewerPaneForSession(session: string): Promise<string> {
+  return (await viewerPanesForSession(session))[0] ?? "";
+}
+
+export async function viewerPanesForSession(session: string): Promise<readonly string[]> {
   const result = await tmux([
     "list-panes",
     "-a",
     "-F",
     "#{pane_id}\t#{@switchboard_target_session}",
   ]);
-  if (!result.ok) return "";
-  return (
-    result.stdout
-      .split("\n")
-      .map((line) => line.split("\t"))
-      .find(([, target]) => target === session)?.[0] ?? ""
+  if (!result.ok) return [];
+  return result.stdout
+    .split("\n")
+    .flatMap((line) => {
+      const [pane, target] = line.split("\t");
+      return pane && target === session ? [pane] : [];
+    });
+}
+
+export async function attachedAgentSessions(): Promise<ReadonlySet<string>> {
+  const result = await tmux([
+    "list-panes",
+    "-a",
+    "-F",
+    "#{@switchboard_role}\t#{@switchboard_target_session}",
+  ]);
+  if (!result.ok) return new Set();
+
+  return new Set(
+    result.stdout.split("\n").flatMap((line) => {
+      const [role, session] = line.split("\t");
+      return role === "viewer" && session ? [session] : [];
+    }),
   );
 }
 

@@ -32,11 +32,13 @@ function fail(id: string, message: string, code = -1): Response {
 }
 
 async function buildState(params: ReportAgentParams): Promise<AgentState> {
-  const info = await paneInfo(params.pane_id, params.tmux_server ?? "agent");
+  const tmuxServer = params.tmux_server ?? "agent";
+  const info = await paneInfo(params.pane_id, tmuxServer);
   return {
     paneId: params.pane_id,
     tool: params.agent,
     status: params.state,
+    tmuxServer,
     cwd: params.cwd ?? info?.cwd ?? "",
     pid: params.pid ?? info?.panePid ?? null,
     promptPreview: params.prompt_preview ?? null,
@@ -57,6 +59,7 @@ async function handleReport(params: ReportAgentParams): Promise<void> {
           ...existing,
           status: next.status,
           tool: next.tool,
+          tmuxServer: next.tmuxServer,
           pid: next.pid ?? existing.pid,
           promptPreview: next.promptPreview ?? existing.promptPreview,
           updatedAt: next.updatedAt,

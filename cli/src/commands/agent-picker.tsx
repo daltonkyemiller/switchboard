@@ -1,4 +1,4 @@
-import { createCliRenderer, type ScrollBoxRenderable } from "@opentui/core";
+import { type ScrollBoxRenderable } from "@opentui/core";
 import { createRoot, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { attachAgentSession } from "./attach.ts";
@@ -6,6 +6,7 @@ import { createAgentSession } from "./new.ts";
 import { listInstalledAgentLaunchers, type AgentLauncher } from "../shared/agent-config.ts";
 import { connect } from "../shared/client.ts";
 import { ensureOpenTuiRuntime } from "../shared/opentui-runtime.ts";
+import { createSwitchboardRenderer } from "../shared/opentui-renderer.ts";
 import { paneWindow, viewerPaneForSessionInWindow } from "../shared/tmux-pane.ts";
 import { tmux } from "../shared/tmux.ts";
 import type { AgentState } from "../shared/state.ts";
@@ -326,6 +327,6 @@ function rowKey(row: PickerRow): string {
 
 export async function runAgentPicker(args: readonly string[]): Promise<void> {
   await ensureOpenTuiRuntime();
-  const renderer = await createCliRenderer();
+  const renderer = await createSwitchboardRenderer();
   createRoot(renderer).render(<AgentPickerApp options={parseOptions(args)} />);
 }
