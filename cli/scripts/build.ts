@@ -12,7 +12,7 @@ const bunfsRoot = process.platform === "win32" ? "B:/~BUN/root/" : "/$bunfs/root
 
 const result = await Bun.build({
   entrypoints: ["./src/index.tsx", parserWorker],
-  // @ts-expect-error Current Bun types do not include compile config for Bun.build.
+  // @ts-expect-error Current locked Bun types do not include compile config for Bun.build.
   compile: {
     outfile: "./dist/debug/switchboard",
   },

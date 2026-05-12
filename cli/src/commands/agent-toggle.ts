@@ -1,3 +1,4 @@
+import { Result } from "@praha/byethrow";
 import { attachAgentSession } from "./attach.ts";
 import { lastAgentForCwd } from "../shared/last-agent.ts";
 import {
@@ -64,5 +65,8 @@ export async function runAgentToggle(args: readonly string[]): Promise<void> {
     return;
   }
 
-  await attachAgentSession({ target: session, targetPane });
+  const attached = await attachAgentSession({ target: session, targetPane });
+  if (Result.isFailure(attached)) {
+    await tmux(["display-message", attached.error.message]);
+  }
 }

@@ -1,5 +1,6 @@
 import { type ScrollBoxRenderable } from "@opentui/core";
 import { createRoot, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
+import { Result } from "@praha/byethrow";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { attachAgentSession } from "./attach.ts";
 import { createAgentSession } from "./new.ts";
@@ -68,20 +69,29 @@ async function attachExistingAgent(agent: AgentState, options: AgentPickerOption
     }
   }
 
-  await attachAgentSession({
+  const attached = await attachAgentSession({
     target: agent.session,
     targetPane: options.targetPane ?? undefined,
   });
+  if (Result.isFailure(attached)) {
+    throw new Error(attached.error.message);
+  }
 }
 
 async function createAndAttachAgent(launcher: AgentLauncher, options: AgentPickerOptions): Promise<void> {
   const result = await createAgentSession({ tool: launcher.tool, cwd: options.cwd });
+  if (Result.isFailure(result)) {
+    throw new Error(result.error.message);
+  }
   if (!process.env["TMUX"]) return;
 
-  await attachAgentSession({
-    target: result.sessionName,
+  const attached = await attachAgentSession({
+    target: result.value.sessionName,
     targetPane: options.targetPane ?? undefined,
   });
+  if (Result.isFailure(attached)) {
+    throw new Error(attached.error.message);
+  }
 }
 
 function AgentPickerApp({ options }: { readonly options: AgentPickerOptions }) {
@@ -232,7 +242,6 @@ function AgentPickerApp({ options }: { readonly options: AgentPickerOptions }) {
         ) : null}
         {rows.map((row, index) => (
           <PickerResultRow
-            key={rowKey(row)}
             row={row}
             selected={index === selectedIndex}
           />
@@ -318,11 +327,6 @@ function SingleLineText({
       style={{ height: 1, width, flexShrink: width ? 0 : 1 }}
     />
   );
-}
-
-function rowKey(row: PickerRow): string {
-  if (row.kind === "agent") return `agent:${row.agent.session}`;
-  return `create:${row.launcher.tool}`;
 }
 
 export async function runAgentPicker(args: readonly string[]): Promise<void> {

@@ -1,6 +1,8 @@
+import { Result } from "@praha/byethrow";
 import { paths } from "../shared/paths.ts";
-import { agentTmux, shellQuote, switchboardCommand, tmux } from "../shared/tmux.ts";
 import { rememberLastAgent } from "../shared/last-agent.ts";
+import { fail, fromTmux, type CliResultAsync, unwrapOrExit } from "../shared/result.ts";
+import { agentTmux, shellQuote, switchboardCommand, tmux } from "../shared/tmux.ts";
 
 const DEFAULT_VIEWER_WIDTH = "80";
 const VIEWER_CLIENT_FLAGS = "active-pane";
@@ -11,14 +13,14 @@ export type AttachOptions = {
   readonly targetPane?: string;
 };
 
-export async function attachAgentSession(options: AttachOptions): Promise<string> {
+export async function attachAgentSession(options: AttachOptions): CliResultAsync<string> {
   if (!process.env["TMUX"]) {
-    throw new Error("must be inside tmux to attach");
+    return fail("must be inside tmux to attach");
   }
 
   const exists = await agentTmux(["has-session", "-t", options.target]);
   if (!exists.ok) {
-    throw new Error(`session not found: ${options.target}`);
+    return fail(`session not found: ${options.target}`);
   }
   await Promise.all([
     agentTmux([
@@ -44,11 +46,10 @@ export async function attachAgentSession(options: AttachOptions): Promise<string
     `TMUX= tmux -S ${shellQuote(paths.agentTmuxSocket)} attach-session -f ${VIEWER_CLIENT_FLAGS} -t ${shellQuote(options.target)}`,
   ];
   const create = await tmux(splitArgs);
-  if (!create.ok) {
-    throw new Error(`failed to open viewer: ${create.stderr || "unknown error"}`);
-  }
+  const created = fromTmux(create, "failed to open viewer");
+  if (Result.isFailure(created)) return created;
 
-  const paneId = create.stdout;
+  const paneId = created.value.stdout;
   await Promise.all([
     tmux(["set-option", "-p", "-t", paneId, "-q", "@switchboard_role", "viewer"]),
     tmux(["set-option", "-p", "-t", paneId, "-q", "@switchboard_target_session", options.target]),
@@ -59,7 +60,7 @@ export async function attachAgentSession(options: AttachOptions): Promise<string
     await rememberLastAgent(cwd.stdout, options.target);
   }
 
-  return paneId;
+  return Result.succeed(paneId);
 }
 
 export async function runAttach(args: readonly string[]): Promise<void> {
@@ -68,12 +69,6 @@ export async function runAttach(args: readonly string[]): Promise<void> {
     console.error("usage: switchboard attach <session>");
     process.exit(1);
   }
-  try {
-    const paneId = await attachAgentSession({ target });
-    console.log(`attached viewer ${paneId} to ${target}`);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(message);
-    process.exit(1);
-  }
+  const paneId = unwrapOrExit(await attachAgentSession({ target }));
+  console.log(`attached viewer ${paneId} to ${target}`);
 }

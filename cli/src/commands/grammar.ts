@@ -1,6 +1,8 @@
+import { Result } from "@praha/byethrow";
 import { existsSync } from "node:fs";
 import { addGrammarToConfig, getGrammarRegistry } from "../picker/grammar-registry.ts";
 import { paths } from "../shared/paths.ts";
+import { cliError } from "../shared/result.ts";
 
 function valuesForFlag(args: readonly string[], flag: string): readonly string[] {
   const values: string[] = [];
@@ -74,20 +76,23 @@ async function runAdd(args: readonly string[]): Promise<void> {
 
 export async function runGrammar(args: readonly string[]): Promise<void> {
   const [subcommand, ...rest] = args;
-  try {
-    if (subcommand === "list") {
-      await runList();
-      return;
-    }
-    if (subcommand === "add") {
-      await runAdd(rest);
-      return;
-    }
-    printUsage();
-    process.exit(1);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`failed: ${message}`);
+  const result = await Result.try({
+    try: async () => {
+      if (subcommand === "list") {
+        await runList();
+        return;
+      }
+      if (subcommand === "add") {
+        await runAdd(rest);
+        return;
+      }
+      printUsage();
+      process.exit(1);
+    },
+    catch: (error) => cliError("failed to manage grammars", error),
+  });
+  if (Result.isFailure(result)) {
+    console.error(`failed: ${result.error.message}`);
     process.exit(1);
   }
 }

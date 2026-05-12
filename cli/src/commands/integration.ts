@@ -1,3 +1,4 @@
+import { Result } from "@praha/byethrow";
 import { installClaude, installCodex, installOpencode } from "../integrations/install.ts";
 
 type Tool = "claude" | "codex" | "opencode";
@@ -9,20 +10,35 @@ function isTool(value: string): value is Tool {
 async function runInstall(tool: Tool): Promise<void> {
   switch (tool) {
     case "claude": {
-      const { hookPath, settingsPath } = await installClaude();
+      const result = await installClaude();
+      if (Result.isFailure(result)) {
+        console.error(`failed: ${result.error.message}`);
+        process.exit(1);
+      }
+      const { hookPath, settingsPath } = result.value;
       console.log(`installed claude integration hook to ${hookPath}`);
       console.log(`ensured claude settings at ${settingsPath}`);
       return;
     }
     case "codex": {
-      const { hookPath, hooksPath, configPath } = await installCodex();
+      const result = await installCodex();
+      if (Result.isFailure(result)) {
+        console.error(`failed: ${result.error.message}`);
+        process.exit(1);
+      }
+      const { hookPath, hooksPath, configPath } = result.value;
       console.log(`installed codex integration hook to ${hookPath}`);
       console.log(`ensured codex hooks at ${hooksPath}`);
       console.log(`ensured codex config at ${configPath}`);
       return;
     }
     case "opencode": {
-      const { pluginPath } = await installOpencode();
+      const result = await installOpencode();
+      if (Result.isFailure(result)) {
+        console.error(`failed: ${result.error.message}`);
+        process.exit(1);
+      }
+      const { pluginPath } = result.value;
       console.log(`installed opencode integration plugin to ${pluginPath}`);
       return;
     }
@@ -39,11 +55,5 @@ export async function runIntegration(args: readonly string[]): Promise<void> {
     console.error("usage: switchboard integration install <claude|codex|opencode>");
     process.exit(1);
   }
-  try {
-    await runInstall(target);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`failed: ${message}`);
-    process.exit(1);
-  }
+  await runInstall(target);
 }

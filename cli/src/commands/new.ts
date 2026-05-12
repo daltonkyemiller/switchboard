@@ -1,7 +1,9 @@
+import { Result } from "@praha/byethrow";
 import { attachAgentSession } from "./attach.ts";
 import { resolveAgentLauncher } from "../shared/agent-config.ts";
 import { connect } from "../shared/client.ts";
 import { paths } from "../shared/paths.ts";
+import { fail, fromTmux, type CliResultAsync, unwrapOrExit } from "../shared/result.ts";
 import { agentTmux, shellQuote, switchboardCommand } from "../shared/tmux.ts";
 import type { Tool } from "../shared/state.ts";
 
@@ -113,7 +115,7 @@ async function notifyDaemonCreated(tool: Tool, pane: AgentPane): Promise<string 
 
 export async function createAgentSession(
   options: CreateAgentOptions,
-): Promise<CreateAgentResult> {
+): CliResultAsync<CreateAgentResult> {
   const cwd = options.cwd ?? process.cwd();
   const sessionName = generateSessionName(options.tool);
   const command = await buildCommandLine(options.tool, options.args ?? []);
@@ -131,9 +133,8 @@ export async function createAgentSession(
     `SWITCHBOARD_SOCKET_PATH=${paths.socket}`,
     command,
   ]);
-  if (!create.ok) {
-    throw new Error(`failed to create tmux session: ${create.stderr || "unknown error"}`);
-  }
+  const created = fromTmux(create, "failed to create tmux session");
+  if (Result.isFailure(created)) return fail(created.error.message);
 
   await Promise.all([
     agentTmux(["set-option", "-t", sessionName, "-q", "status", "off"]),
@@ -154,7 +155,7 @@ export async function createAgentSession(
   const pane = await getSessionPane(sessionName);
   const notifyError = pane ? await notifyDaemonCreated(options.tool, pane) : "agent pane not found";
 
-  return { sessionName, command, paneId: pane?.paneId ?? null, notifyError };
+  return Result.succeed({ sessionName, command, paneId: pane?.paneId ?? null, notifyError });
 }
 
 export async function runNew(args: readonly string[]): Promise<void> {
@@ -168,26 +169,20 @@ export async function runNew(args: readonly string[]): Promise<void> {
     process.exit(1);
   }
 
-  try {
-    const { sessionName, command, notifyError } = await createAgentSession({
-      tool,
-      args: toolArgs,
-    });
-    console.log(`created session ${sessionName} running ${command}`);
-    if (notifyError) {
-      console.error(`warning: created session but could not notify daemon: ${notifyError}`);
-    }
-
-    if (detach) return;
-    if (!process.env["TMUX"]) {
-      console.log("(not inside tmux — skipping viewer attach)");
-      return;
-    }
-    const paneId = await attachAgentSession({ target: sessionName });
-    console.log(`attached viewer ${paneId} to ${sessionName}`);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(message);
-    process.exit(1);
+  const { sessionName, command, notifyError } = unwrapOrExit(await createAgentSession({
+    tool,
+    args: toolArgs,
+  }));
+  console.log(`created session ${sessionName} running ${command}`);
+  if (notifyError) {
+    console.error(`warning: created session but could not notify daemon: ${notifyError}`);
   }
+
+  if (detach) return;
+  if (!process.env["TMUX"]) {
+    console.log("(not inside tmux — skipping viewer attach)");
+    return;
+  }
+  const paneId = unwrapOrExit(await attachAgentSession({ target: sessionName }));
+  console.log(`attached viewer ${paneId} to ${sessionName}`);
 }

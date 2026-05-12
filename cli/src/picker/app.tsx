@@ -195,7 +195,6 @@ export function PickerApp({ cwd, targetPane, initialQuery = "", theme }: PickerP
           ) : (
             visible.map((hit, index) => (
               <Row
-                key={rowKey(hit, index)}
                 id={resultRowId(index)}
                 hit={hit}
                 query={query}
@@ -516,11 +515,6 @@ function splitMatches(text: string, query: string): readonly { readonly text: st
 function nvimBadge(source: NvimContextSource | null): string | null {
   if (!source) return null;
   return "NV";
-}
-
-function rowKey(hit: Hit, index: number): string {
-  if (hit.kind === "content") return `${hit.path}:${hit.lineNumber}:${index}`;
-  return `${hit.path}:${index}`;
 }
 
 function resultRowId(index: number): string {

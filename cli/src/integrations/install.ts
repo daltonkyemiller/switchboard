@@ -1,5 +1,7 @@
+import { Result } from "@praha/byethrow";
 import { chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { cliError, isErrno, type CliResultAsync } from "../shared/result.ts";
 import { ensureCodexHooksEnabled } from "./codex-toml.ts";
 import { CLAUDE_HOOK_FILENAME, CLAUDE_HOOK_SCRIPT } from "./hooks/claude.ts";
 import { CODEX_HOOK_FILENAME, CODEX_HOOK_SCRIPT } from "./hooks/codex.ts";
@@ -7,11 +9,11 @@ import { OPENCODE_PLUGIN_FILENAME, OPENCODE_PLUGIN_SCRIPT } from "./hooks/openco
 import { ensureCommandHook, shellSingleQuote } from "./settings-patch.ts";
 
 const home = process.env["HOME"];
-if (!home) throw new Error("HOME is not set");
 
-const claudeDir = join(home, ".claude");
-const codexDir = join(home, ".codex");
-const opencodeDir = join(home, ".config", "opencode");
+function homeDir(): string {
+  if (!home) throw new Error("HOME is not set");
+  return home;
+}
 
 async function isDirectory(path: string): Promise<boolean> {
   try {
@@ -30,7 +32,7 @@ async function readJson(path: string): Promise<Record<string, unknown>> {
     }
     return parsed as Record<string, unknown>;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+    if (isErrno(error, "ENOENT")) return {};
     throw error;
   }
 }
@@ -40,7 +42,8 @@ export type ClaudeInstallResult = {
   readonly settingsPath: string;
 };
 
-export async function installClaude(): Promise<ClaudeInstallResult> {
+async function installClaudeImpl(): Promise<ClaudeInstallResult> {
+  const claudeDir = join(homeDir(), ".claude");
   if (!(await isDirectory(claudeDir))) {
     throw new Error(`claude directory not found at ${claudeDir}. install claude code first`);
   }
@@ -77,13 +80,21 @@ export async function installClaude(): Promise<ClaudeInstallResult> {
   return { hookPath, settingsPath };
 }
 
+export function installClaude(): CliResultAsync<ClaudeInstallResult> {
+  return Result.try({
+    try: installClaudeImpl,
+    catch: (error) => cliError("failed to install claude integration", error),
+  });
+}
+
 export type CodexInstallResult = {
   readonly hookPath: string;
   readonly hooksPath: string;
   readonly configPath: string;
 };
 
-export async function installCodex(): Promise<CodexInstallResult> {
+async function installCodexImpl(): Promise<CodexInstallResult> {
+  const codexDir = join(homeDir(), ".codex");
   if (!(await isDirectory(codexDir))) {
     throw new Error(`codex directory not found at ${codexDir}. install codex first`);
   }
@@ -115,7 +126,7 @@ export async function installCodex(): Promise<CodexInstallResult> {
   try {
     existing = await readFile(configPath, "utf8");
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    if (!isErrno(error, "ENOENT")) throw error;
   }
   const next = ensureCodexHooksEnabled(existing);
   if (next !== existing) {
@@ -125,11 +136,19 @@ export async function installCodex(): Promise<CodexInstallResult> {
   return { hookPath, hooksPath, configPath };
 }
 
+export function installCodex(): CliResultAsync<CodexInstallResult> {
+  return Result.try({
+    try: installCodexImpl,
+    catch: (error) => cliError("failed to install codex integration", error),
+  });
+}
+
 export type OpencodeInstallResult = {
   readonly pluginPath: string;
 };
 
-export async function installOpencode(): Promise<OpencodeInstallResult> {
+async function installOpencodeImpl(): Promise<OpencodeInstallResult> {
+  const opencodeDir = join(homeDir(), ".config", "opencode");
   if (!(await isDirectory(opencodeDir))) {
     throw new Error(
       `opencode config directory not found at ${opencodeDir}. install opencode first`,
@@ -142,4 +161,11 @@ export async function installOpencode(): Promise<OpencodeInstallResult> {
   const pluginPath = join(pluginsDir, OPENCODE_PLUGIN_FILENAME);
   await writeFile(pluginPath, OPENCODE_PLUGIN_SCRIPT);
   return { pluginPath };
+}
+
+export function installOpencode(): CliResultAsync<OpencodeInstallResult> {
+  return Result.try({
+    try: installOpencodeImpl,
+    catch: (error) => cliError("failed to install opencode integration", error),
+  });
 }

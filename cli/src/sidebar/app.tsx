@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useKeyboard, useRenderer } from "@opentui/react";
+import { Result } from "@praha/byethrow";
 import { attachAgentSession } from "../commands/attach.ts";
 import { connect, type Client } from "../shared/client.ts";
 import { paths } from "../shared/paths.ts";
@@ -69,7 +70,10 @@ function applyEvent(prev: Map<string, AgentState>, event: Event): Map<string, Ag
 
 async function attachAgent(agent: AgentState): Promise<void> {
   if (!agent.session) return;
-  await attachAgentSession({ target: agent.session });
+  const result = await attachAgentSession({ target: agent.session });
+  if (Result.isFailure(result)) {
+    throw new Error(result.error.message);
+  }
 }
 
 async function focusAttachedAgent(agent: AgentState): Promise<string | null> {
@@ -320,7 +324,11 @@ export function SidebarApp({ filterCwd }: SidebarProps) {
     }
     if (key.name === "return") {
       const selected = visible[safeIndex];
-      if (selected) void attachAgent(selected).catch(() => {});
+      if (selected) {
+        void attachAgent(selected).catch((error) => {
+          setNotice(error instanceof Error ? error.message : "failed to attach agent");
+        });
+      }
       return;
     }
     if (key.name === "d") {
@@ -453,7 +461,6 @@ export function SidebarApp({ filterCwd }: SidebarProps) {
         ) : activeTab === "all" ? (
           groups.map((group) => (
             <AgentGroupSection
-              key={group.cwd}
               group={group}
               selectedPaneId={selectedPaneId}
               attachedSessions={attachedSessions}
@@ -463,7 +470,6 @@ export function SidebarApp({ filterCwd }: SidebarProps) {
         ) : (
           visible.map((agent) => (
             <AgentRow
-              key={agent.paneId}
               agent={agent}
               selected={agent.paneId === selectedPaneId}
               attached={attachedSessions.has(agent.session)}
@@ -494,7 +500,6 @@ function AgentGroupSection({
       <text fg="#665c54">{truncate(group.cwd, 72)}</text>
       {group.agents.map((agent) => (
         <AgentRow
-          key={agent.paneId}
           agent={agent}
           selected={agent.paneId === selectedPaneId}
           attached={attachedSessions.has(agent.session)}

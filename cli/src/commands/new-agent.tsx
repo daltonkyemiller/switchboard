@@ -1,4 +1,5 @@
 import { createRoot, useKeyboard, useRenderer } from "@opentui/react";
+import { Result } from "@praha/byethrow";
 import { useEffect, useState } from "react";
 import { attachAgentSession } from "./attach.ts";
 import { createAgentSession } from "./new.ts";
@@ -32,11 +33,17 @@ function truncate(value: string, max: number): string {
 
 async function spawnAgent(launcher: AgentLauncher, options: NewAgentOptions): Promise<void> {
   const result = await createAgentSession({ tool: launcher.tool, cwd: options.cwd });
+  if (Result.isFailure(result)) {
+    throw new Error(result.error.message);
+  }
   if (process.env["TMUX"]) {
-    await attachAgentSession({
-      target: result.sessionName,
+    const attached = await attachAgentSession({
+      target: result.value.sessionName,
       targetPane: options.targetPane ?? undefined,
     });
+    if (Result.isFailure(attached)) {
+      throw new Error(attached.error.message);
+    }
   }
 }
 
@@ -112,7 +119,6 @@ function NewAgentApp({ options }: { readonly options: NewAgentOptions }) {
         ) : null}
         {launchers.map((launcher, index) => (
           <LauncherRow
-            key={launcher.tool}
             launcher={launcher}
             selected={index === selectedIndex}
           />
