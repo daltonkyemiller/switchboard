@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useKeyboard, useRenderer } from "@opentui/react";
 import { attachAgentSession } from "../commands/attach.ts";
 import { connect, type Client } from "../shared/client.ts";
+import { paths } from "../shared/paths.ts";
 import type { Event } from "../shared/protocol.ts";
 import type { AgentState, AgentStatus } from "../shared/state.ts";
-import { agentTmux, reloadAgentTmuxConfig, switchboardBinary, tmux } from "../shared/tmux.ts";
+import { agentTmux, reloadAgentTmuxConfig, shellQuote, switchboardBinary, tmux } from "../shared/tmux.ts";
 import {
   attachedAgentSessions,
   paneValue,
+  popupClientForPane,
   viewerPaneForSession,
   viewerPanesForSession,
 } from "../shared/tmux-pane.ts";
@@ -35,6 +37,7 @@ type SidebarTab = "cwd" | "all";
 
 const SIDEBAR_TABS: readonly SidebarTab[] = ["cwd", "all"];
 const ATTACHMENT_REFRESH_MS = 2_000;
+const PREVIEW_CAPTURE_LINES = 1_000;
 
 type AgentGroup = {
   readonly cwd: string;
@@ -98,6 +101,49 @@ async function detachAgent(agent: AgentState): Promise<string | null> {
   if (failed) return failed.stderr || "failed to detach agent";
 
   return `detached ${panes.length} ${panes.length === 1 ? "viewer" : "viewers"}`;
+}
+
+async function previewAgent(agent: AgentState): Promise<string | null> {
+  if (!agent.session) return "agent has no session";
+
+  const exists = await agentTmux(["has-session", "-t", agent.session]);
+  if (!exists.ok) return exists.stderr || `session not found: ${agent.session}`;
+
+  const popupClient = await popupClientForPane(process.env["TMUX_PANE"] ?? "");
+  const title = ` ${agent.tool} preview `;
+  const script = [
+    `capture=$(TMUX= tmux -S ${shellQuote(paths.agentTmuxSocket)} capture-pane -e -p -J -S -${PREVIEW_CAPTURE_LINES} -t ${shellQuote(agent.session)} 2>&1)`,
+    "code=$?",
+    `if [ "$code" -ne 0 ]; then`,
+    `  printf '%s\\n' "$capture"`,
+    `  sleep 3`,
+    `  exit "$code"`,
+    "fi",
+    `if command -v less >/dev/null 2>&1; then`,
+    `  printf '%s\\n' "$capture" | less -R +G`,
+    "else",
+    `  printf '%s\\n\\npress enter to close' "$capture"`,
+    "  read -r _",
+    "fi",
+  ].join("\n");
+
+  const opened = await tmux([
+    "display-popup",
+    ...(popupClient ? ["-c", popupClient] : []),
+    "-E",
+    "-w",
+    "90%",
+    "-h",
+    "80%",
+    "-d",
+    agent.cwd || process.cwd(),
+    "-b",
+    "rounded",
+    "-T",
+    title,
+    `sh -lc ${shellQuote(script)}`,
+  ]);
+  return opened.ok ? null : opened.stderr || "failed to open preview";
 }
 
 function isMissingTmuxSession(message: string): boolean {
@@ -300,6 +346,15 @@ export function SidebarApp({ filterCwd }: SidebarProps) {
       }
       return;
     }
+    if (key.name === "p") {
+      const selected = visible[safeIndex];
+      if (selected) {
+        void previewAgent(selected).then((message) => {
+          if (message) setNotice(message);
+        });
+      }
+      return;
+    }
     if (key.name === "x") {
       const selected = visible[safeIndex];
       if (!selected) return;
@@ -418,7 +473,7 @@ export function SidebarApp({ filterCwd }: SidebarProps) {
         )}
       </box>
       {notice ? <text fg="#928374">{truncate(notice, 80)}</text> : null}
-      <text fg="#665c54">[/] tabs · j/k · enter attach · f follow · d detach · x kill · n new · r reload · q quit</text>
+      <text fg="#665c54">[/] tabs · j/k · enter attach · p preview · f follow · d detach · x kill · n new · r reload · q quit</text>
     </box>
   );
 }
