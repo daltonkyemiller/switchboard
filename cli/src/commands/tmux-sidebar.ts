@@ -4,6 +4,7 @@ import { findSidebar } from "../shared/tmux-pane.ts";
 import { switchboardCommand, tmux, tmuxOption } from "../shared/tmux.ts";
 
 const ENFORCE_THROTTLE_MS = 200;
+const SAVED_LAYOUT_OPTION = "@switchboard_layout_without_sidebar";
 
 function currentTimeMs(): number {
   return Date.now();
@@ -18,6 +19,23 @@ async function numericOption(name: string, fallback: number): Promise<number> {
   return Number.isNaN(value) ? fallback : value;
 }
 
+async function windowOption(windowId: string, name: string): Promise<string> {
+  const result = await tmux(["show-options", "-t", windowId, "-wqv", name]);
+  return result.ok ? result.stdout : "";
+}
+
+async function windowLayout(windowId: string): Promise<string> {
+  const result = await tmux(["display-message", "-t", windowId, "-p", "#{window_layout}"]);
+  return result.ok ? result.stdout : "";
+}
+
+async function restoreSavedLayout(windowId: string): Promise<void> {
+  const layout = await windowOption(windowId, SAVED_LAYOUT_OPTION);
+  if (!layout) return;
+
+  await tmux(["select-layout", "-t", windowId, layout]);
+}
+
 export async function runSidebarToggle(args: readonly string[]): Promise<void> {
   const bindingPane = args[0] ?? process.env["TMUX_PANE"] ?? "";
   const currentWindowResult = bindingPane
@@ -27,7 +45,13 @@ export async function runSidebarToggle(args: readonly string[]): Promise<void> {
   const existing = currentWindow ? await findSidebar(currentWindow) : "";
   if (existing) {
     await tmux(["kill-pane", "-t", existing]);
+    await restoreSavedLayout(currentWindow);
     return;
+  }
+
+  const layout = currentWindow ? await windowLayout(currentWindow) : "";
+  if (currentWindow && layout) {
+    await tmux(["set-option", "-t", currentWindow, "-w", "-q", SAVED_LAYOUT_OPTION, layout]);
   }
 
   const width = String(await numericOption("@switchboard-sidebar-width", 32));
