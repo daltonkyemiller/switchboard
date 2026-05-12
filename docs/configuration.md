@@ -238,6 +238,30 @@ Markdown, JSON, CSS, HTML, Dockerfile, and Makefile. User grammars are checked
 before built-ins, so a user grammar can override a built-in extension or
 basename.
 
+## Neovim Companion
+
+The optional Neovim plugin under `nvim/` writes editor context for the picker:
+
+```lua
+require("switchboard").setup({
+  enabled = true,
+  debounce_ms = 150,
+  max_open_buffers = 20,
+  max_recent_files = 50,
+  state_dir = "~/.local/state/switchboard/nvim-context",
+})
+```
+
+Context is stored under:
+
+```text
+~/.local/state/switchboard/nvim-context/
+```
+
+The picker uses this to rank the current file, alternate file, open buffers,
+and recent files ahead of normal file search results. The picker still works
+normally when no Neovim context exists.
+
 ## `agent-tmux.conf`
 
 Path: `~/.config/switchboard/agent-tmux.conf`

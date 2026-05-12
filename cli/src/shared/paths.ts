@@ -34,5 +34,6 @@ export const paths = {
   agentsSnapshot: join(stateDir, "agents.json"),
   logFile: join(stateDir, "daemon.log"),
   popupLogFile: join(stateDir, "popup.log"),
+  nvimContextDir: join(stateDir, "nvim-context"),
   runtimeAssetsDir: join(cacheDir, "runtime"),
 } as const;

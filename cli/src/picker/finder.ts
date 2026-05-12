@@ -1,3 +1,5 @@
+import { loadNvimPickerContext, type NvimPickerContext } from "../shared/nvim-context.ts";
+
 export type FileHit = {
   readonly kind: "file";
   readonly path: string;
@@ -27,6 +29,37 @@ type RgJson =
 function basename(p: string): string {
   const slash = p.lastIndexOf("/");
   return slash >= 0 ? p.slice(slash + 1) : p;
+}
+
+function matchesQuery(path: string, query: string): boolean {
+  if (!query) return true;
+  return path.toLowerCase().includes(query.toLowerCase());
+}
+
+function prioritizeFiles(
+  files: readonly FileHit[],
+  context: NvimPickerContext | null,
+  query: string,
+  limit: number,
+): readonly FileHit[] {
+  if (!context || context.priorities.size === 0) return files;
+
+  const byPath = new Map(files.map((file) => [file.path, file]));
+  for (const path of context.priorities.keys()) {
+    if (!byPath.has(path) && matchesQuery(path, query)) {
+      byPath.set(path, { kind: "file", path, fileName: basename(path) });
+    }
+  }
+
+  return [...byPath.values()]
+    .map((file, index) => ({
+      file,
+      index,
+      priority: context.priorities.get(file.path) ?? 0,
+    }))
+    .sort((a, b) => b.priority - a.priority || a.index - b.index)
+    .slice(0, limit)
+    .map((entry) => entry.file);
 }
 
 async function run(args: readonly string[], cwd: string, signal?: AbortSignal): Promise<string> {
@@ -114,10 +147,13 @@ async function grepContent(query: string, cwd: string, limit: number): Promise<r
 }
 
 export function createFinder(basePath: string): FinderHandle {
+  const context = loadNvimPickerContext(basePath).catch(() => null);
   return {
     async searchFiles(query, limit = 50) {
-      if (!query) return listAllFiles(basePath, limit);
-      return findFiles(query, basePath, limit);
+      const results = query
+        ? await findFiles(query, basePath, limit)
+        : await listAllFiles(basePath, limit);
+      return prioritizeFiles(results, await context, query, limit);
     },
     async searchContent(query, limit = 50) {
       if (!query) return [];
