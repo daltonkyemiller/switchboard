@@ -1,5 +1,18 @@
 local M = {}
 
+---@class SwitchboardSendConfig
+---@field submit? boolean Submit sent text with Enter. Defaults to true.
+---@field select_agent? boolean Open the agent selector before sending. Defaults to false.
+
+---@class SwitchboardConfig
+---@field enabled? boolean Write picker context from Neovim. Defaults to true.
+---@field debounce_ms? integer Debounce for context writes. Defaults to 150.
+---@field max_open_buffers? integer Maximum open buffers stored in picker context. Defaults to 20.
+---@field max_recent_files? integer Maximum recent files stored in picker context. Defaults to 50.
+---@field state_dir? string Directory where picker context JSON is written.
+---@field command? string Switchboard CLI executable or absolute path. Defaults to "switchboard".
+---@field send? SwitchboardSendConfig Selection sending defaults.
+
 local function default_state_dir()
   local state_home = vim.env.XDG_STATE_HOME or (vim.env.HOME and (vim.env.HOME .. "/.local/state"))
   if not state_home or state_home == "" then
@@ -8,6 +21,7 @@ local function default_state_dir()
   return state_home .. "/switchboard/nvim-context"
 end
 
+---@type SwitchboardConfig
 local defaults = {
   enabled = true,
   debounce_ms = 150,
@@ -127,6 +141,7 @@ function M.schedule_write()
   end)
 end
 
+---@param opts? SwitchboardConfig
 function M.setup(opts)
   config = vim.tbl_deep_extend("force", defaults, opts or {})
   require("switchboard.commands").setup({

@@ -1,13 +1,14 @@
 import { type ScrollBoxRenderable } from "@opentui/core";
 import { createRoot, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
 import { Result } from "@praha/byethrow";
-import { readFile } from "node:fs/promises";
+import { readFile, unlink } from "node:fs/promises";
+import path from "node:path";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { connect } from "../shared/client.ts";
 import { lastAgentForCwd, rememberLastAgent } from "../shared/last-agent.ts";
 import { ensureOpenTuiRuntime } from "../shared/opentui-runtime.ts";
 import { createSwitchboardRenderer } from "../shared/opentui-renderer.ts";
-import { fail, fromTmux, type CliResultAsync, unwrapOrExit } from "../shared/result.ts";
+import { fail, fromTmux, succeed, type CliResultAsync, unwrapOrExit } from "../shared/result.ts";
 import type { AgentState } from "../shared/state.ts";
 import { agentTmux, popupShellCommand, shellQuote, switchboardCommand, tmux } from "../shared/tmux.ts";
 import { popupClientForPane } from "../shared/tmux-pane.ts";
@@ -20,11 +21,18 @@ type SendOptions = {
   readonly submit: boolean;
   readonly text: string | null;
   readonly file: string | null;
+  readonly referenceFile: string | null;
+  readonly referenceLine: string | null;
+  readonly unlinkFile: boolean;
 };
+
+type SendPayload =
+  | { readonly kind: "text"; readonly text: string }
+  | { readonly kind: "reference"; readonly file: string; readonly line: string | null };
 
 type SendPickerOptions = {
   readonly cwd: string;
-  readonly text: string;
+  readonly payload: SendPayload;
   readonly submit: boolean;
 };
 
@@ -51,23 +59,41 @@ function parseSendOptions(args: readonly string[]): SendOptions {
     submit: !hasFlag(args, "--no-submit"),
     text: valueForFlag(args, "--text"),
     file: valueForFlag(args, "--file"),
+    referenceFile: valueForFlag(args, "--reference-file"),
+    referenceLine: valueForFlag(args, "--reference-line"),
+    unlinkFile: hasFlag(args, "--unlink-file"),
   };
 }
 
-async function textFromOptions(options: SendOptions): CliResultAsync<string> {
-  if (options.text !== null) return Result.succeed(options.text);
-  if (options.file) {
-    const path = options.file;
-    const result = await Result.try({
-      try: () => readFile(path, "utf8"),
-      catch: (error) => ({ message: `failed to read ${path}`, cause: error }),
+async function payloadFromOptions(options: SendOptions): CliResultAsync<SendPayload> {
+  if (options.referenceFile !== null) {
+    return Result.succeed({
+      kind: "reference",
+      file: options.referenceFile,
+      line: options.referenceLine,
     });
-    return result;
+  }
+  if (options.text !== null) return Result.succeed({ kind: "text", text: options.text });
+  if (options.file) {
+    const filePath = options.file;
+    const result = await Result.try({
+      try: () => readFile(filePath, "utf8"),
+      catch: (error) => ({ message: `failed to read ${filePath}`, cause: error }),
+    });
+    if (Result.isFailure(result)) return result;
+    return succeed({ kind: "text", text: result.value });
   }
 
   const text = await new Response(Bun.stdin.stream()).text();
   if (text.length === 0) return fail("no text provided");
-  return Result.succeed(text);
+  return Result.succeed({ kind: "text", text });
+}
+
+function payloadTextForCwd(payload: SendPayload, cwd: string): string {
+  if (payload.kind === "text") return payload.text;
+
+  const relativeFile = path.relative(cwd, payload.file).replaceAll("\\", "/");
+  return `@${relativeFile}${payload.line ? `:${payload.line}` : ""} `;
 }
 
 async function loadAgents(): Promise<readonly AgentState[]> {
@@ -89,9 +115,17 @@ async function sessionExists(session: string): Promise<boolean> {
 
 async function activeSessionForCwd(cwd: string): CliResultAsync<string> {
   const session = await lastAgentForCwd(cwd);
-  if (!session) return fail(`no active agent for ${cwd}`);
-  if (!(await sessionExists(session))) return fail(`active agent no longer exists: ${session}`);
-  return Result.succeed(session);
+  if (session && await sessionExists(session)) return Result.succeed(session);
+
+  const agents = await loadAgents();
+  const [fallback] = agents
+    .filter((agent) => agent.cwd === cwd)
+    .slice()
+    .sort((a, b) => b.updatedAt - a.updatedAt);
+  if (fallback && await sessionExists(fallback.session)) return Result.succeed(fallback.session);
+
+  if (session) return fail(`active agent no longer exists: ${session}`);
+  return fail(`no active agent for ${cwd}`);
 }
 
 export async function sendTextToAgentSession(
@@ -128,13 +162,17 @@ async function sendToSelectedSession(options: SendOptions): CliResultAsync<strin
 
 export async function runSend(args: readonly string[]): Promise<void> {
   const options = parseSendOptions(args);
-  const text = unwrapOrExit(await textFromOptions(options));
+  const payload = unwrapOrExit(await payloadFromOptions(options));
+  if (options.unlinkFile && options.file) {
+    await unlink(options.file).catch(() => {});
+  }
   if (options.select) {
-    await runSendSelector({ cwd: options.cwd, text, submit: options.submit });
+    await runSendSelector({ cwd: options.cwd, payload, submit: options.submit });
     return;
   }
 
   const session = unwrapOrExit(await sendToSelectedSession(options));
+  const text = payloadTextForCwd(payload, options.cwd);
   unwrapOrExit(await sendTextToAgentSession(session, text, { submit: options.submit }));
   await rememberLastAgent(options.cwd, session);
 }
@@ -151,7 +189,10 @@ export async function runSendPopup(args: readonly string[]): Promise<void> {
     "--cwd",
     shellQuote(options.cwd),
     options.file ? `--file ${shellQuote(options.file)}` : "",
+    options.unlinkFile ? "--unlink-file" : "",
     options.text !== null ? `--text ${shellQuote(options.text)}` : "",
+    options.referenceFile !== null ? `--reference-file ${shellQuote(options.referenceFile)}` : "",
+    options.referenceLine !== null ? `--reference-line ${shellQuote(options.referenceLine)}` : "",
     options.submit ? "" : "--no-submit",
   ].filter(Boolean).join(" ");
 
@@ -236,8 +277,9 @@ function SendPickerApp({ options }: { readonly options: SendPickerOptions }) {
       return;
     }
 
+    const text = payloadTextForCwd(options.payload, agent.cwd);
     setMessage(`sending to ${agent.session}`);
-    const sent = await sendTextToAgentSession(agent.session, options.text, { submit: options.submit });
+    const sent = await sendTextToAgentSession(agent.session, text, { submit: options.submit });
     if (Result.isFailure(sent)) {
       setMessage(sent.error.message);
       return;
