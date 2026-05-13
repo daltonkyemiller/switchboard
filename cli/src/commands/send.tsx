@@ -4,6 +4,7 @@ import { Result } from "@praha/byethrow";
 import { readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { attachAgentSession } from "./attach.ts";
 import { connect } from "../shared/client.ts";
 import { lastAgentForCwd, rememberLastAgent } from "../shared/last-agent.ts";
 import { ensureOpenTuiRuntime } from "../shared/opentui-runtime.ts";
@@ -11,7 +12,7 @@ import { createSwitchboardRenderer } from "../shared/opentui-renderer.ts";
 import { fail, fromTmux, succeed, type CliResultAsync, unwrapOrExit } from "../shared/result.ts";
 import type { AgentState } from "../shared/state.ts";
 import { agentTmux, popupShellCommand, shellQuote, switchboardCommand, tmux } from "../shared/tmux.ts";
-import { popupClientForPane } from "../shared/tmux-pane.ts";
+import { paneWindow, popupClientForPane, viewerPaneForSessionInWindow } from "../shared/tmux-pane.ts";
 
 type SendOptions = {
   readonly cwd: string;
@@ -19,6 +20,8 @@ type SendOptions = {
   readonly active: boolean;
   readonly select: boolean;
   readonly submit: boolean;
+  readonly focus: boolean;
+  readonly targetPane: string | null;
   readonly text: string | null;
   readonly file: string | null;
   readonly referenceFile: string | null;
@@ -34,6 +37,8 @@ type SendPickerOptions = {
   readonly cwd: string;
   readonly payload: SendPayload;
   readonly submit: boolean;
+  readonly focus: boolean;
+  readonly targetPane: string | null;
 };
 
 type LoadState =
@@ -57,6 +62,8 @@ function parseSendOptions(args: readonly string[]): SendOptions {
     active: hasFlag(args, "--active"),
     select: hasFlag(args, "--select"),
     submit: !hasFlag(args, "--no-submit"),
+    focus: hasFlag(args, "--focus"),
+    targetPane: valueForFlag(args, "--target-pane"),
     text: valueForFlag(args, "--text"),
     file: valueForFlag(args, "--file"),
     referenceFile: valueForFlag(args, "--reference-file"),
@@ -160,6 +167,27 @@ async function sendToSelectedSession(options: SendOptions): CliResultAsync<strin
   return fail("select mode must run through switchboard send-popup");
 }
 
+async function focusAgentSession(session: string, targetPane: string | null): CliResultAsync<void> {
+  if (!process.env["TMUX"]) return Result.succeed(undefined);
+
+  if (targetPane) {
+    const windowId = await paneWindow(targetPane);
+    const viewer = windowId ? await viewerPaneForSessionInWindow(windowId, session) : "";
+    if (viewer) {
+      const selected = fromTmux(await tmux(["select-pane", "-t", viewer]), "failed to focus agent");
+      if (Result.isFailure(selected)) return selected;
+      return Result.succeed(undefined);
+    }
+  }
+
+  const attached = await attachAgentSession({
+    target: session,
+    targetPane: targetPane ?? undefined,
+  });
+  if (Result.isFailure(attached)) return fail(attached.error.message, attached.error.cause);
+  return Result.succeed(undefined);
+}
+
 export async function runSend(args: readonly string[]): Promise<void> {
   const options = parseSendOptions(args);
   const payload = unwrapOrExit(await payloadFromOptions(options));
@@ -167,7 +195,13 @@ export async function runSend(args: readonly string[]): Promise<void> {
     await unlink(options.file).catch(() => {});
   }
   if (options.select) {
-    await runSendSelector({ cwd: options.cwd, payload, submit: options.submit });
+    await runSendSelector({
+      cwd: options.cwd,
+      payload,
+      submit: options.submit,
+      focus: options.focus,
+      targetPane: options.targetPane,
+    });
     return;
   }
 
@@ -175,6 +209,9 @@ export async function runSend(args: readonly string[]): Promise<void> {
   const text = payloadTextForCwd(payload, options.cwd);
   unwrapOrExit(await sendTextToAgentSession(session, text, { submit: options.submit }));
   await rememberLastAgent(options.cwd, session);
+  if (options.focus) {
+    unwrapOrExit(await focusAgentSession(session, options.targetPane));
+  }
 }
 
 export async function runSendPopup(args: readonly string[]): Promise<void> {
@@ -188,11 +225,13 @@ export async function runSendPopup(args: readonly string[]): Promise<void> {
     "--select",
     "--cwd",
     shellQuote(options.cwd),
+    ...(bindingPane ? ["--target-pane", shellQuote(bindingPane)] : []),
     options.file ? `--file ${shellQuote(options.file)}` : "",
     options.unlinkFile ? "--unlink-file" : "",
     options.text !== null ? `--text ${shellQuote(options.text)}` : "",
     options.referenceFile !== null ? `--reference-file ${shellQuote(options.referenceFile)}` : "",
     options.referenceLine !== null ? `--reference-line ${shellQuote(options.referenceLine)}` : "",
+    options.focus ? "--focus" : "",
     options.submit ? "" : "--no-submit",
   ].filter(Boolean).join(" ");
 
@@ -285,6 +324,13 @@ function SendPickerApp({ options }: { readonly options: SendPickerOptions }) {
       return;
     }
     await rememberLastAgent(agent.cwd, agent.session);
+    if (options.focus) {
+      const focused = await focusAgentSession(agent.session, options.targetPane);
+      if (Result.isFailure(focused)) {
+        setMessage(focused.error.message);
+        return;
+      }
+    }
     close();
   }
 

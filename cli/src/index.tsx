@@ -34,8 +34,8 @@ usage:
   switchboard pick [--target PANE] [--cwd PATH]     file/content picker; inserts @path into target
   switchboard pick-popup [pane]                     tmux popup wrapper for pick
   switchboard pick-agent --session SESSION          internal: open picker from agent tmux server
-  switchboard send [--active|--session SESSION|--select] [--cwd PATH] [--file PATH|--text TEXT] [--no-submit]
-  switchboard send-popup [pane] [--cwd PATH] [--file PATH|--text TEXT] [--no-submit]
+  switchboard send [--active|--session SESSION|--select] [--cwd PATH] [--file PATH|--text TEXT] [--focus] [--no-submit]
+  switchboard send-popup [pane] [--cwd PATH] [--file PATH|--text TEXT] [--focus] [--no-submit]
   switchboard sidebar-toggle [pane]                 toggle sidebar in the current window
   switchboard sidebar-enforce-width                 clamp sidebar width from tmux hooks
   switchboard router <action> [pane]                routed tmux split/layout/swap/passthrough actions

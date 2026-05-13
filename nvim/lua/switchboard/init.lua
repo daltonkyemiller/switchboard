@@ -3,6 +3,7 @@ local M = {}
 ---@class SwitchboardSendConfig
 ---@field submit? boolean Submit sent text with Enter. Defaults to true.
 ---@field select_agent? boolean Open the agent selector before sending. Defaults to false.
+---@field focus? boolean Focus the target agent after sending. Defaults to false.
 
 ---@class SwitchboardConfig
 ---@field enabled? boolean Write picker context from Neovim. Defaults to true.
@@ -32,6 +33,7 @@ local defaults = {
   send = {
     submit = true,
     select_agent = false,
+    focus = false,
   },
 }
 
@@ -148,6 +150,7 @@ function M.setup(opts)
     command = config.command,
     submit = config.send.submit,
     select_agent = config.send.select_agent,
+    focus = config.send.focus,
   })
   vim.api.nvim_clear_autocmds({ group = group })
 

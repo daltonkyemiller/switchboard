@@ -31,11 +31,27 @@ local opts = {
   send = {
     submit = true,
     select_agent = false,
+    focus = false,
   },
 }
 
 require("switchboard").setup(opts)
 ```
+
+`send` controls the defaults for every send command:
+
+```lua
+---@type SwitchboardConfig
+local opts = {
+  send = {
+    submit = true,        -- press Enter after sending
+    select_agent = false, -- open the agent selector before sending
+    focus = false,        -- focus or open the target agent pane after sending
+  },
+}
+```
+
+Each send call can override those defaults.
 
 If `switchboard` is not on Neovim's PATH, set `command` to the full binary
 path:
@@ -66,11 +82,34 @@ By default it sends the last visual selection to the same cwd agent used by
 file reference such as `@README.md:3` or `@README.md:3-8`.
 `send_file_reference()` sends only the file reference, such as `@README.md`.
 
+All three commands accept the same options:
+
+```lua
+require("switchboard.commands").send_selection({
+  command = "switchboard", -- binary path, overrides setup()
+  cwd = vim.uv.cwd(),      -- cwd used for active-agent lookup
+  submit = true,           -- press Enter after sending
+  select_agent = false,    -- open the agent selector before sending
+  focus = false,           -- focus or open the target agent pane after sending
+})
+```
+
+`send_selection()` also accepts `text`, `lines`, `line1`, and `line2` when you
+want to bypass the visual selection.
+
 To choose the target agent in a Switchboard popup:
 
 ```lua
 require("switchboard.commands").send_selection({
   select_agent = true,
+})
+```
+
+To focus the target agent after sending:
+
+```lua
+require("switchboard.commands").send_selection({
+  focus = true,
 })
 ```
 
@@ -82,6 +121,10 @@ require("switchboard.commands").send_selection({
   submit = true,
 })
 ```
+
+File references are formatted relative to the target agent's cwd. If you open
+the selector and pick an agent in another repo, Switchboard builds the
+`@path[:line]` reference for that agent.
 
 The plugin also defines:
 

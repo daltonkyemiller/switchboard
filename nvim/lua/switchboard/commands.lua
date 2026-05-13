@@ -4,6 +4,7 @@ local M = {}
 ---@field command? string Switchboard CLI executable or absolute path.
 ---@field submit? boolean Submit sent text with Enter. Defaults to true.
 ---@field select_agent? boolean Open the agent selector before sending. Defaults to false.
+---@field focus? boolean Focus the target agent after sending. Defaults to false.
 
 ---@class SwitchboardSendSelectionOptions
 ---@field command? string Switchboard CLI executable or absolute path for this call.
@@ -14,12 +15,14 @@ local M = {}
 ---@field line2? integer Last selected line.
 ---@field submit? boolean Submit sent text with Enter.
 ---@field select_agent? boolean Open the agent selector before sending.
+---@field focus? boolean Focus the target agent after sending.
 
 ---@type SwitchboardCommandsConfig
 local defaults = {
   command = "switchboard",
   submit = true,
   select_agent = false,
+  focus = false,
 }
 
 local config = vim.deepcopy(defaults)
@@ -143,6 +146,11 @@ function M.setup(opts)
   config = vim.tbl_deep_extend("force", defaults, opts or {})
 end
 
+local function option_value(opts, key)
+  if opts[key] ~= nil then return opts[key] end
+  return config[key]
+end
+
 local function send_text(text, opts)
   opts = opts or {}
   if not text or text == "" then
@@ -152,10 +160,9 @@ local function send_text(text, opts)
 
   local cwd = opts.cwd or vim.uv.cwd()
   local path = write_temp(text)
-  local select_agent = opts.select_agent
-  if select_agent == nil then select_agent = config.select_agent end
-  local submit = opts.submit
-  if submit == nil then submit = config.submit end
+  local select_agent = option_value(opts, "select_agent")
+  local submit = option_value(opts, "submit")
+  local focus = option_value(opts, "focus")
 
   local args = { opts.command or config.command }
   if select_agent then
@@ -163,6 +170,12 @@ local function send_text(text, opts)
     table.insert(args, "--unlink-file")
   else
     vim.list_extend(args, { "send", "--active", "--cwd", cwd, "--file", path })
+  end
+  if focus then
+    table.insert(args, "--focus")
+    if not select_agent and vim.env.TMUX_PANE then
+      vim.list_extend(args, { "--target-pane", vim.env.TMUX_PANE })
+    end
   end
   if not submit then table.insert(args, "--no-submit") end
 
@@ -180,10 +193,9 @@ end
 local function send_reference(file, line_reference, opts)
   opts = opts or {}
   local cwd = opts.cwd or vim.uv.cwd()
-  local select_agent = opts.select_agent
-  if select_agent == nil then select_agent = config.select_agent end
-  local submit = opts.submit
-  if submit == nil then submit = config.submit end
+  local select_agent = option_value(opts, "select_agent")
+  local submit = option_value(opts, "submit")
+  local focus = option_value(opts, "focus")
 
   local args = { opts.command or config.command }
   if select_agent then
@@ -192,6 +204,12 @@ local function send_reference(file, line_reference, opts)
     vim.list_extend(args, { "send", "--active", "--cwd", cwd, "--reference-file", file })
   end
   if line_reference then vim.list_extend(args, { "--reference-line", line_reference }) end
+  if focus then
+    table.insert(args, "--focus")
+    if not select_agent and vim.env.TMUX_PANE then
+      vim.list_extend(args, { "--target-pane", vim.env.TMUX_PANE })
+    end
+  end
   if not submit then table.insert(args, "--no-submit") end
 
   run(args, function(code, stderr)
