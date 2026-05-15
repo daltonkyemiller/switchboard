@@ -263,7 +263,7 @@ function Row({
   if (hit.kind === "file") {
     const dir = hit.path.slice(0, hit.path.length - hit.fileName.length);
     const badge = nvimBadge(hit.source);
-    const icon = theme.nerdFontIcons ? iconForPath(hit.path) : null;
+    const icon = theme.nerdFontIcons ? iconForPath(hit.path, hit.entryKind) : null;
     return (
       <box
         id={id}
@@ -523,5 +523,6 @@ function resultRowId(index: number): string {
 
 function formatInsertion(hit: Hit): string {
   if (hit.kind === "content") return `@${hit.path}:${hit.lineNumber} `;
+  if (hit.entryKind === "directory") return `@${hit.path}/ `;
   return `@${hit.path} `;
 }

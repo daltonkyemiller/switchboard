@@ -7,6 +7,7 @@ export type FileIcon = {
 };
 
 const DEFAULT_ICON: FileIcon = { glyph: "󰈔", color: RGBA.fromIndex(7, "#a89984") };
+const DIRECTORY_ICON: FileIcon = { glyph: "󰉋", color: RGBA.fromIndex(3, "#fabd2f") };
 
 const BASENAME_ICONS: Record<string, FileIcon> = {
   ".env": { glyph: "󰌾", color: RGBA.fromIndex(3, "#fabd2f") },
@@ -35,7 +36,9 @@ const EXTENSION_ICONS: Record<string, FileIcon> = {
   ".yml": { glyph: "", color: RGBA.fromIndex(3, "#fabd2f") },
 };
 
-export function iconForPath(path: string): FileIcon {
+export function iconForPath(path: string, entryKind: "file" | "directory" = "file"): FileIcon {
+  if (entryKind === "directory") return DIRECTORY_ICON;
+
   const name = basename(path);
   return BASENAME_ICONS[name] ?? EXTENSION_ICONS[extname(name).toLowerCase()] ?? DEFAULT_ICON;
 }

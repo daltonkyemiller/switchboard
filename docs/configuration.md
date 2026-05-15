@@ -323,6 +323,42 @@ Use `switchboard.conf` when you want a custom minimal agent-server environment.
 Avoid sourcing your normal `~/.tmux.conf` here unless you explicitly want those
 bindings inside nested agent sessions.
 
+For copy-mode plugins, put the plugin setup in `switchboard.conf` or source a
+small shared file from both tmux configs:
+
+```tmux
+# ~/.config/switchboard/switchboard.conf
+set -g default-command "${SHELL}"
+set -g prefix C-b
+set -g prefix2 None
+unbind-key -aq
+unbind-key -aq -T root
+bind-key [ copy-mode
+set -g status off
+set -g mouse off
+set -g pane-border-status off
+set -g escape-time 10
+set -g focus-events on
+set -g default-terminal "tmux-256color"
+
+setw -g mode-keys vi
+bind-key -T copy-mode-vi v send-keys -X begin-selection
+bind-key -T copy-mode-vi y send-keys -X copy-pipe-and-cancel "pbcopy"
+bind-key -T copy-mode-vi MouseDragEnd1Pane send-keys -X copy-pipe-and-cancel "pbcopy"
+```
+
+If you use TPM-managed plugins in the agent server, add only the plugins you
+want inside agent panes:
+
+```tmux
+set -g @plugin 'tmux-plugins/tpm'
+set -g @plugin 'tmux-plugins/tmux-yank'
+run '~/.tmux/plugins/tpm/tpm'
+```
+
+This works because the agent server is normal tmux, just on a separate socket.
+It does not inherit plugins from the parent tmux server automatically.
+
 Reload the running agent tmux server after editing the config with:
 
 ```sh

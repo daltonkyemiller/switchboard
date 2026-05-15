@@ -1,3 +1,5 @@
+import { lstat } from "node:fs/promises";
+import { join } from "node:path";
 import {
   loadNvimPickerContext,
   type NvimContextSource,
@@ -8,6 +10,7 @@ export type FileHit = {
   readonly kind: "file";
   readonly path: string;
   readonly fileName: string;
+  readonly entryKind: "file" | "directory";
   readonly source: NvimContextSource | null;
 };
 
@@ -32,8 +35,13 @@ type RgJson =
   | { type: string };
 
 function basename(p: string): string {
-  const slash = p.lastIndexOf("/");
-  return slash >= 0 ? p.slice(slash + 1) : p;
+  const normalized = trimTrailingSlash(p);
+  const slash = normalized.lastIndexOf("/");
+  return slash >= 0 ? normalized.slice(slash + 1) : normalized;
+}
+
+function trimTrailingSlash(path: string): string {
+  return path.endsWith("/") ? path.slice(0, -1) : path;
 }
 
 function matchesQuery(path: string, query: string): boolean {
@@ -56,6 +64,7 @@ function prioritizeFiles(
         kind: "file",
         path,
         fileName: basename(path),
+        entryKind: "file",
         source: context.sources.get(path) ?? null,
       });
     }
@@ -88,15 +97,45 @@ async function run(args: readonly string[], cwd: string, signal?: AbortSignal): 
   return text;
 }
 
+async function hitForPath(path: string, cwd: string): Promise<FileHit> {
+  const normalized = trimTrailingSlash(path);
+  const info = await lstat(join(cwd, normalized));
+  return {
+    kind: "file",
+    path: normalized,
+    fileName: basename(normalized),
+    entryKind: info.isDirectory() ? "directory" : "file",
+    source: null,
+  };
+}
+
+function uniquePaths(paths: readonly string[]): readonly string[] {
+  return [...new Set(paths.map(trimTrailingSlash).filter(Boolean))];
+}
+
+async function hitsFromFdOutput(text: string, cwd: string): Promise<readonly FileHit[]> {
+  const paths = uniquePaths(text.split("\n"));
+  return Promise.all(paths.map((path) => hitForPath(path, cwd)));
+}
+
 async function listAllFiles(cwd: string, limit: number): Promise<readonly FileHit[]> {
   const text = await run(
-    ["fd", "--type", "f", "--hidden", "--exclude", ".git", "--color=never", "--max-results", String(limit)],
+    [
+      "fd",
+      "--type",
+      "f",
+      "--type",
+      "d",
+      "--hidden",
+      "--exclude",
+      ".git",
+      "--color=never",
+      "--max-results",
+      String(limit),
+    ],
     cwd,
   );
-  return text
-    .split("\n")
-    .filter(Boolean)
-    .map((path) => ({ kind: "file" as const, path, fileName: basename(path), source: null }));
+  return hitsFromFdOutput(text, cwd);
 }
 
 async function findFiles(query: string, cwd: string, limit: number): Promise<readonly FileHit[]> {
@@ -105,6 +144,8 @@ async function findFiles(query: string, cwd: string, limit: number): Promise<rea
       "fd",
       "--type",
       "f",
+      "--type",
+      "d",
       "--hidden",
       "--exclude",
       ".git",
@@ -115,10 +156,31 @@ async function findFiles(query: string, cwd: string, limit: number): Promise<rea
     ],
     cwd,
   );
-  return text
-    .split("\n")
-    .filter(Boolean)
-    .map((path) => ({ kind: "file" as const, path, fileName: basename(path), source: null }));
+  const matchedHits = await hitsFromFdOutput(text, cwd);
+  const matchedDirectories = matchedHits
+    .filter((hit) => hit.entryKind === "directory")
+    .map((hit) => hit.path);
+  if (matchedDirectories.length === 0) return matchedHits;
+
+  const descendantText = await run(
+    [
+      "fd",
+      "--type",
+      "f",
+      "--hidden",
+      "--exclude",
+      ".git",
+      "--color=never",
+      "--max-results",
+      String(limit),
+      ".",
+      ...matchedDirectories,
+    ],
+    cwd,
+  );
+  const descendantHits = await hitsFromFdOutput(descendantText, cwd);
+  return [...new Map([...matchedHits, ...descendantHits].map((hit) => [hit.path, hit])).values()]
+    .slice(0, limit);
 }
 
 async function grepContent(query: string, cwd: string, limit: number): Promise<readonly ContentHit[]> {
