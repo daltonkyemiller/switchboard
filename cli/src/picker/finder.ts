@@ -139,9 +139,11 @@ async function listAllFiles(cwd: string, limit: number): Promise<readonly FileHi
 }
 
 async function findFiles(query: string, cwd: string, limit: number): Promise<readonly FileHit[]> {
+  const usesPathQuery = query.includes("/");
   const text = await run(
     [
       "fd",
+      ...(usesPathQuery ? ["--full-path"] : []),
       "--type",
       "f",
       "--type",
