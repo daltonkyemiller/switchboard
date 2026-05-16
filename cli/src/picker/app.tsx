@@ -7,11 +7,12 @@ import {
   StyledText,
   type TreeSitterClient,
 } from "@opentui/core";
-import { createFinder, type Hit } from "./finder.ts";
+import { createFinder } from "./finder.ts";
 import { iconForPath, type FileIcon } from "./file-icons.ts";
 import { getHighlighter } from "./highlighter.ts";
 import { buildAbsPath, loadPreview, sliceAround, type PreviewContent } from "./preview.ts";
 import type { NvimContextSource } from "../shared/nvim-context.ts";
+import type { PickerResult } from "./results.ts";
 import type { PickerTheme } from "./theme.ts";
 import { pasteToPane, resolveAgentPane } from "./tmux.ts";
 
@@ -31,7 +32,7 @@ export function PickerApp({ cwd, targetPane, initialQuery = "", theme }: PickerP
   const resultsRef = useRef<ScrollBoxRenderable | null>(null);
   const [mode, setMode] = useState<Mode>("files");
   const [query, setQuery] = useState(initialQuery);
-  const [hits, setHits] = useState<readonly Hit[]>([]);
+  const [hits, setHits] = useState<readonly PickerResult[]>([]);
   const [selected, setSelected] = useState(0);
   const [searching, setSearching] = useState(false);
   const [preview, setPreview] = useState<{ content: PreviewContent; startLine: number } | null>(
@@ -71,7 +72,11 @@ export function PickerApp({ cwd, targetPane, initialQuery = "", theme }: PickerP
       return;
     }
     const load = async () => {
-      const abs = buildAbsPath(cwd, hit.path);
+      if (!hit.previewPath) {
+        setPreview(null);
+        return;
+      }
+      const abs = buildAbsPath(cwd, hit.previewPath);
       const content = await loadPreview(abs);
       if (cancelled || !content) {
         if (!cancelled) setPreview(null);
@@ -109,8 +114,8 @@ export function PickerApp({ cwd, targetPane, initialQuery = "", theme }: PickerP
     process.exit(code);
   };
 
-  const accept = async (hit: Hit) => {
-    const insertion = formatInsertion(hit);
+  const accept = async (hit: PickerResult) => {
+    const insertion = hit.reference;
     if (targetPane) {
       const real = await resolveAgentPane(targetPane);
       await pasteToPane(real, insertion);
@@ -250,7 +255,7 @@ function Row({
   theme,
 }: {
   readonly id: string;
-  readonly hit: Hit;
+  readonly hit: PickerResult;
   readonly query: string;
   readonly selected: boolean;
   readonly theme: PickerTheme;
@@ -261,7 +266,6 @@ function Row({
   const nameColor = selected ? theme.colors.selectedFg : theme.colors.itemFg;
 
   if (hit.kind === "file") {
-    const dir = hit.path.slice(0, hit.path.length - hit.fileName.length);
     const badge = nvimBadge(hit.source);
     const icon = theme.nerdFontIcons ? iconForPath(hit.path, hit.entryKind) : null;
     return (
@@ -281,8 +285,8 @@ function Row({
         <Badge label={badge} theme={theme} selected={selected} />
         <Icon icon={icon} />
         <PathText
-          dir={dir}
-          fileName={hit.fileName}
+          dir={hit.displayDir}
+          fileName={hit.displayName}
           query={query}
           dirFg={theme.colors.pathFg}
           fileFg={nameColor}
@@ -311,7 +315,7 @@ function Row({
         <text
           content={styledMatchText(
             [
-              { text: hit.fileName, fg: nameColor },
+              { text: hit.displayName, fg: nameColor },
               { text: `:${hit.lineNumber}`, fg: theme.colors.dimFg },
             ],
             query,
@@ -519,10 +523,4 @@ function nvimBadge(source: NvimContextSource | null): string | null {
 
 function resultRowId(index: number): string {
   return `picker-result-${index}`;
-}
-
-function formatInsertion(hit: Hit): string {
-  if (hit.kind === "content") return `@${hit.path}:${hit.lineNumber} `;
-  if (hit.entryKind === "directory") return `@${hit.path}/ `;
-  return `@${hit.path} `;
 }

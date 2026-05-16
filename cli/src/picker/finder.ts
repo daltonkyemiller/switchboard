@@ -5,28 +5,18 @@ import {
   type NvimContextSource,
   type NvimPickerContext,
 } from "../shared/nvim-context.ts";
-
-export type FileHit = {
-  readonly kind: "file";
-  readonly path: string;
-  readonly fileName: string;
-  readonly entryKind: "file" | "directory";
-  readonly source: NvimContextSource | null;
-};
-
-export type ContentHit = {
-  readonly kind: "content";
-  readonly path: string;
-  readonly fileName: string;
-  readonly lineNumber: number;
-  readonly line: string;
-};
-
-export type Hit = FileHit | ContentHit;
+import {
+  basename,
+  createContentResult,
+  createFileResult,
+  type FileResult,
+  type PickerResult,
+  trimTrailingSlash,
+} from "./results.ts";
 
 export type FinderHandle = {
-  readonly searchFiles: (query: string, limit?: number) => Promise<readonly FileHit[]>;
-  readonly searchContent: (query: string, limit?: number) => Promise<readonly ContentHit[]>;
+  readonly searchFiles: (query: string, limit?: number) => Promise<readonly FileResult[]>;
+  readonly searchContent: (query: string, limit?: number) => Promise<readonly PickerResult[]>;
   readonly destroy: () => void;
 };
 
@@ -34,39 +24,27 @@ type RgJson =
   | { type: "match"; data: { path: { text: string }; line_number: number; lines: { text: string } } }
   | { type: string };
 
-function basename(p: string): string {
-  const normalized = trimTrailingSlash(p);
-  const slash = normalized.lastIndexOf("/");
-  return slash >= 0 ? normalized.slice(slash + 1) : normalized;
-}
-
-function trimTrailingSlash(path: string): string {
-  return path.endsWith("/") ? path.slice(0, -1) : path;
-}
-
 function matchesQuery(path: string, query: string): boolean {
   if (!query) return true;
   return path.toLowerCase().includes(query.toLowerCase());
 }
 
 function prioritizeFiles(
-  files: readonly FileHit[],
+  files: readonly FileResult[],
   context: NvimPickerContext | null,
   query: string,
   limit: number,
-): readonly FileHit[] {
+): readonly FileResult[] {
   if (!context || context.priorities.size === 0) return files;
 
   const byPath = new Map(files.map((file) => [file.path, file]));
   for (const path of context.priorities.keys()) {
     if (!byPath.has(path) && matchesQuery(path, query)) {
-      byPath.set(path, {
-        kind: "file",
+      byPath.set(path, createFileResult({
         path,
-        fileName: basename(path),
         entryKind: "file",
         source: context.sources.get(path) ?? null,
-      });
+      }));
     }
   }
 
@@ -97,28 +75,25 @@ async function run(args: readonly string[], cwd: string, signal?: AbortSignal): 
   return text;
 }
 
-async function hitForPath(path: string, cwd: string): Promise<FileHit> {
+async function hitForPath(path: string, cwd: string): Promise<FileResult> {
   const normalized = trimTrailingSlash(path);
   const info = await lstat(join(cwd, normalized));
-  return {
-    kind: "file",
+  return createFileResult({
     path: normalized,
-    fileName: basename(normalized),
     entryKind: info.isDirectory() ? "directory" : "file",
-    source: null,
-  };
+  });
 }
 
 function uniquePaths(paths: readonly string[]): readonly string[] {
   return [...new Set(paths.map(trimTrailingSlash).filter(Boolean))];
 }
 
-async function hitsFromFdOutput(text: string, cwd: string): Promise<readonly FileHit[]> {
+async function hitsFromFdOutput(text: string, cwd: string): Promise<readonly FileResult[]> {
   const paths = uniquePaths(text.split("\n"));
   return Promise.all(paths.map((path) => hitForPath(path, cwd)));
 }
 
-async function listAllFiles(cwd: string, limit: number): Promise<readonly FileHit[]> {
+async function listAllFiles(cwd: string, limit: number): Promise<readonly FileResult[]> {
   const text = await run(
     [
       "fd",
@@ -138,7 +113,7 @@ async function listAllFiles(cwd: string, limit: number): Promise<readonly FileHi
   return hitsFromFdOutput(text, cwd);
 }
 
-async function findFiles(query: string, cwd: string, limit: number): Promise<readonly FileHit[]> {
+async function findFiles(query: string, cwd: string, limit: number): Promise<readonly FileResult[]> {
   const usesPathQuery = query.includes("/");
   const text = await run(
     [
@@ -185,7 +160,7 @@ async function findFiles(query: string, cwd: string, limit: number): Promise<rea
     .slice(0, limit);
 }
 
-async function grepContent(query: string, cwd: string, limit: number): Promise<readonly ContentHit[]> {
+async function grepContent(query: string, cwd: string, limit: number): Promise<readonly PickerResult[]> {
   const text = await run(
     [
       "rg",
@@ -201,7 +176,7 @@ async function grepContent(query: string, cwd: string, limit: number): Promise<r
     cwd,
   );
 
-  const hits: ContentHit[] = [];
+  const hits: PickerResult[] = [];
   for (const line of text.split("\n")) {
     if (!line) continue;
     if (hits.length >= limit) break;
@@ -213,13 +188,11 @@ async function grepContent(query: string, cwd: string, limit: number): Promise<r
     }
     if (parsed.type !== "match") continue;
     const match = parsed as Extract<RgJson, { type: "match" }>;
-    hits.push({
-      kind: "content",
+    hits.push(createContentResult({
       path: match.data.path.text,
-      fileName: basename(match.data.path.text),
       lineNumber: match.data.line_number,
       line: match.data.lines.text.replace(/\n$/, ""),
-    });
+    }));
   }
   return hits;
 }

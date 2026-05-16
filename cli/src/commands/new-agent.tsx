@@ -1,8 +1,7 @@
 import { createRoot, useKeyboard, useRenderer } from "@opentui/react";
 import { Result } from "@praha/byethrow";
 import { useEffect, useState } from "react";
-import { attachAgentSession } from "./attach.ts";
-import { createAgentSession } from "./new.ts";
+import { createAndAttachAgentSession } from "./agent-session.ts";
 import { listInstalledAgentLaunchers, type AgentLauncher } from "../shared/agent-config.ts";
 import { ensureOpenTuiRuntime } from "../shared/opentui-runtime.ts";
 import { createSwitchboardRenderer } from "../shared/opentui-renderer.ts";
@@ -32,18 +31,13 @@ function truncate(value: string, max: number): string {
 }
 
 async function spawnAgent(launcher: AgentLauncher, options: NewAgentOptions): Promise<void> {
-  const result = await createAgentSession({ tool: launcher.tool, cwd: options.cwd });
+  const result = await createAndAttachAgentSession({
+    tool: launcher.tool,
+    cwd: options.cwd,
+    targetPane: options.targetPane,
+  });
   if (Result.isFailure(result)) {
     throw new Error(result.error.message);
-  }
-  if (process.env["TMUX"]) {
-    const attached = await attachAgentSession({
-      target: result.value.sessionName,
-      targetPane: options.targetPane ?? undefined,
-    });
-    if (Result.isFailure(attached)) {
-      throw new Error(attached.error.message);
-    }
   }
 }
 

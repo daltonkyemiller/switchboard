@@ -4,15 +4,19 @@ import { Result } from "@praha/byethrow";
 import { readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { attachAgentSession } from "./attach.ts";
-import { connect } from "../shared/client.ts";
-import { lastAgentForCwd, rememberLastAgent } from "../shared/last-agent.ts";
+import {
+  activeSessionForCwd,
+  attachOrFocusAgentSession,
+  loadAgents,
+  rememberAgentSession,
+  sendTextToAgentSession,
+} from "./agent-session.ts";
 import { ensureOpenTuiRuntime } from "../shared/opentui-runtime.ts";
 import { createSwitchboardRenderer } from "../shared/opentui-renderer.ts";
-import { fail, fromTmux, succeed, type CliResultAsync, unwrapOrExit } from "../shared/result.ts";
+import { fail, succeed, type CliResultAsync, unwrapOrExit } from "../shared/result.ts";
 import type { AgentState } from "../shared/state.ts";
-import { agentTmux, popupShellCommand, shellQuote, switchboardCommand, tmux } from "../shared/tmux.ts";
-import { paneWindow, popupClientForPane, viewerPaneForSessionInWindow } from "../shared/tmux-pane.ts";
+import { popupShellCommand, shellQuote, switchboardCommand, tmux } from "../shared/tmux.ts";
+import { popupClientForPane } from "../shared/tmux-pane.ts";
 
 type SendOptions = {
   readonly cwd: string;
@@ -103,89 +107,10 @@ function payloadTextForCwd(payload: SendPayload, cwd: string): string {
   return `@${relativeFile}${payload.line ? `:${payload.line}` : ""} `;
 }
 
-async function loadAgents(): Promise<readonly AgentState[]> {
-  const client = await connect();
-  const response = await client.request("state.list", {});
-  client.close();
-
-  if ("error" in response) {
-    throw new Error(response.error.message);
-  }
-
-  const result = response.result as { agents?: readonly AgentState[] };
-  return result.agents ?? [];
-}
-
-async function sessionExists(session: string): Promise<boolean> {
-  return (await agentTmux(["has-session", "-t", session])).ok;
-}
-
-async function activeSessionForCwd(cwd: string): CliResultAsync<string> {
-  const session = await lastAgentForCwd(cwd);
-  if (session && await sessionExists(session)) return Result.succeed(session);
-
-  const agents = await loadAgents();
-  const [fallback] = agents
-    .filter((agent) => agent.cwd === cwd)
-    .slice()
-    .sort((a, b) => b.updatedAt - a.updatedAt);
-  if (fallback && await sessionExists(fallback.session)) return Result.succeed(fallback.session);
-
-  if (session) return fail(`active agent no longer exists: ${session}`);
-  return fail(`no active agent for ${cwd}`);
-}
-
-export async function sendTextToAgentSession(
-  session: string,
-  text: string,
-  options: { readonly submit: boolean },
-): CliResultAsync<void> {
-  const exists = await agentTmux(["has-session", "-t", session]);
-  if (!exists.ok) return fail(`session not found: ${session}`);
-
-  const bufferName = `switchboard-send-${process.pid}`;
-  const buffer = fromTmux(await agentTmux(["set-buffer", "-b", bufferName, "--", text]), "failed to stage text");
-  if (Result.isFailure(buffer)) return buffer;
-
-  const pasted = fromTmux(
-    await agentTmux(["paste-buffer", "-d", "-b", bufferName, "-t", session]),
-    "failed to send text",
-  );
-  if (Result.isFailure(pasted)) return pasted;
-
-  if (options.submit) {
-    const submitted = fromTmux(await agentTmux(["send-keys", "-t", session, "Enter"]), "failed to submit text");
-    if (Result.isFailure(submitted)) return submitted;
-  }
-
-  return Result.succeed(undefined);
-}
-
 async function sendToSelectedSession(options: SendOptions): CliResultAsync<string> {
   if (options.session) return Result.succeed(options.session);
   if (options.active || !options.select) return activeSessionForCwd(options.cwd);
   return fail("select mode must run through switchboard send-popup");
-}
-
-async function focusAgentSession(session: string, targetPane: string | null): CliResultAsync<void> {
-  if (!process.env["TMUX"]) return Result.succeed(undefined);
-
-  if (targetPane) {
-    const windowId = await paneWindow(targetPane);
-    const viewer = windowId ? await viewerPaneForSessionInWindow(windowId, session) : "";
-    if (viewer) {
-      const selected = fromTmux(await tmux(["select-pane", "-t", viewer]), "failed to focus agent");
-      if (Result.isFailure(selected)) return selected;
-      return Result.succeed(undefined);
-    }
-  }
-
-  const attached = await attachAgentSession({
-    target: session,
-    targetPane: targetPane ?? undefined,
-  });
-  if (Result.isFailure(attached)) return fail(attached.error.message, attached.error.cause);
-  return Result.succeed(undefined);
 }
 
 export async function runSend(args: readonly string[]): Promise<void> {
@@ -208,9 +133,9 @@ export async function runSend(args: readonly string[]): Promise<void> {
   const session = unwrapOrExit(await sendToSelectedSession(options));
   const text = payloadTextForCwd(payload, options.cwd);
   unwrapOrExit(await sendTextToAgentSession(session, text, { submit: options.submit }));
-  await rememberLastAgent(options.cwd, session);
+  await rememberAgentSession(options.cwd, session);
   if (options.focus) {
-    unwrapOrExit(await focusAgentSession(session, options.targetPane));
+    unwrapOrExit(await attachOrFocusAgentSession({ session, targetPane: options.targetPane }));
   }
 }
 
@@ -323,9 +248,12 @@ function SendPickerApp({ options }: { readonly options: SendPickerOptions }) {
       setMessage(sent.error.message);
       return;
     }
-    await rememberLastAgent(agent.cwd, agent.session);
+    await rememberAgentSession(agent.cwd, agent.session);
     if (options.focus) {
-      const focused = await focusAgentSession(agent.session, options.targetPane);
+      const focused = await attachOrFocusAgentSession({
+        session: agent.session,
+        targetPane: options.targetPane,
+      });
       if (Result.isFailure(focused)) {
         setMessage(focused.error.message);
         return;

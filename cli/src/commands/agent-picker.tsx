@@ -2,14 +2,14 @@ import { type ScrollBoxRenderable } from "@opentui/core";
 import { createRoot, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
 import { Result } from "@praha/byethrow";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { attachAgentSession } from "./attach.ts";
-import { createAgentSession } from "./new.ts";
+import {
+  attachOrFocusAgentSession,
+  createAndAttachAgentSession,
+  loadAgents,
+} from "./agent-session.ts";
 import { listInstalledAgentLaunchers, type AgentLauncher } from "../shared/agent-config.ts";
-import { connect } from "../shared/client.ts";
 import { ensureOpenTuiRuntime } from "../shared/opentui-runtime.ts";
 import { createSwitchboardRenderer } from "../shared/opentui-renderer.ts";
-import { paneWindow, viewerPaneForSessionInWindow } from "../shared/tmux-pane.ts";
-import { tmux } from "../shared/tmux.ts";
 import type { AgentState } from "../shared/state.ts";
 
 type PickerTab = "cwd" | "all";
@@ -46,32 +46,10 @@ function truncate(value: string, max: number): string {
   return `${value.slice(0, max - 1)}…`;
 }
 
-async function loadAgents(): Promise<readonly AgentState[]> {
-  const client = await connect();
-  const response = await client.request("state.list", {});
-  client.close();
-
-  if ("error" in response) {
-    throw new Error(response.error.message);
-  }
-
-  const result = response.result as { agents?: readonly AgentState[] };
-  return result.agents ?? [];
-}
-
 async function attachExistingAgent(agent: AgentState, options: AgentPickerOptions): Promise<void> {
-  if (options.targetPane) {
-    const windowId = await paneWindow(options.targetPane);
-    const viewer = windowId ? await viewerPaneForSessionInWindow(windowId, agent.session) : "";
-    if (viewer) {
-      await tmux(["select-pane", "-t", viewer]);
-      return;
-    }
-  }
-
-  const attached = await attachAgentSession({
-    target: agent.session,
-    targetPane: options.targetPane ?? undefined,
+  const attached = await attachOrFocusAgentSession({
+    session: agent.session,
+    targetPane: options.targetPane,
   });
   if (Result.isFailure(attached)) {
     throw new Error(attached.error.message);
@@ -79,18 +57,13 @@ async function attachExistingAgent(agent: AgentState, options: AgentPickerOption
 }
 
 async function createAndAttachAgent(launcher: AgentLauncher, options: AgentPickerOptions): Promise<void> {
-  const result = await createAgentSession({ tool: launcher.tool, cwd: options.cwd });
+  const result = await createAndAttachAgentSession({
+    tool: launcher.tool,
+    cwd: options.cwd,
+    targetPane: options.targetPane,
+  });
   if (Result.isFailure(result)) {
     throw new Error(result.error.message);
-  }
-  if (!process.env["TMUX"]) return;
-
-  const attached = await attachAgentSession({
-    target: result.value.sessionName,
-    targetPane: options.targetPane ?? undefined,
-  });
-  if (Result.isFailure(attached)) {
-    throw new Error(attached.error.message);
   }
 }
 
