@@ -77,12 +77,30 @@ switchboard agent-tmux reload
 
 ## Neovim Companion
 
-An optional companion plugin lives in [`nvim/`](nvim/). Add it to your Neovim
-plugin manager and call:
+An optional companion plugin lives in [`nvim/`](nvim/). It should load at
+startup so Switchboard has current editor context before the picker opens:
 
 ```lua
-require("switchboard").setup()
+---@type LazySpec
+return {
+  dir = "~/dev/switchboard/nvim",
+  name = "switchboard.nvim",
+  lazy = false,
+  ---@type SwitchboardConfig
+  opts = {
+    command = "switchboard",
+  },
+}
 ```
 
-It reports editor context to the Switchboard daemon so the picker can rank the
-current file, alternate file, open buffers, and recent files first.
+Neovim reports context directly to the Switchboard daemon. The old state-file
+path is now only a fallback/cache:
+
+```text
+~/.local/state/switchboard/nvim-context/
+```
+
+The picker asks the daemon for current file, alternate file, open buffers, and
+recent files, then falls back to a recent cache file if the daemon is
+unavailable. See [`nvim/README.md`](nvim/README.md) for the send-selection and
+file-reference APIs.
