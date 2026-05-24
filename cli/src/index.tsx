@@ -8,6 +8,7 @@ import { runIntegration } from "./commands/integration.ts";
 import { runList } from "./commands/list.ts";
 import { runNewAgent } from "./commands/new-agent.tsx";
 import { runNew } from "./commands/new.ts";
+import { runNvimContext } from "./commands/nvim-context.ts";
 import { runPick, runPickAgent } from "./commands/pick.tsx";
 import { runRelease, runReport } from "./commands/report.ts";
 import { runSend, runSendPopup } from "./commands/send.tsx";
@@ -36,6 +37,7 @@ usage:
   switchboard pick-agent --session SESSION          internal: open picker from agent tmux server
   switchboard send [--active|--session SESSION|--select] [--cwd PATH] [--file PATH|--text TEXT] [--focus] [--no-submit]
   switchboard send-popup [pane] [--cwd PATH] [--file PATH|--text TEXT] [--focus] [--no-submit]
+  switchboard nvim-context report|release              internal: sync Neovim picker context
   switchboard sidebar-toggle [pane]                 toggle sidebar in the current window
   switchboard sidebar-enforce-width                 clamp sidebar width from tmux hooks
   switchboard router <action> [pane]                routed tmux split/layout/swap/passthrough actions
@@ -110,6 +112,9 @@ async function main(): Promise<void> {
       return;
     case "send-popup":
       await runSendPopup(rest);
+      return;
+    case "nvim-context":
+      await runNvimContext(rest);
       return;
     case "sidebar-toggle":
       await runSidebarToggle(rest);

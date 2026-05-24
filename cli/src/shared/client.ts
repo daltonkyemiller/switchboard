@@ -4,12 +4,17 @@ import type { Event, Request, Response } from "./protocol.ts";
 
 type ClientState = {
   buffer: string;
-  pending: Map<string, (response: Response) => void>;
+  pending: Map<string, PendingRequest>;
   onEvent: ((event: Event) => void) | null;
 };
 
+type PendingRequest = {
+  readonly resolve: (response: Response) => void;
+  readonly timeout: Timer;
+};
+
 export type Client = {
-  request: (method: Request["method"], params: object) => Promise<Response>;
+  request: (method: Request["method"], params: object, timeoutMs?: number) => Promise<Response>;
   onEvent: (handler: (event: Event) => void) => void;
   close: () => void;
 };
@@ -34,10 +39,11 @@ function processLine(state: ClientState, line: string): void {
     return;
   }
   if (typeof obj["id"] === "string") {
-    const resolver = state.pending.get(obj["id"]);
-    if (resolver) {
+    const pending = state.pending.get(obj["id"]);
+    if (pending) {
       state.pending.delete(obj["id"]);
-      resolver(parsed as Response);
+      clearTimeout(pending.timeout);
+      pending.resolve(parsed as Response);
     }
   }
 }
@@ -66,8 +72,9 @@ export async function connect(): Promise<Client> {
         }
       },
       close() {
-        for (const resolver of state.pending.values()) {
-          resolver({ id: "", error: { code: -1, message: "connection closed" } });
+        for (const pending of state.pending.values()) {
+          clearTimeout(pending.timeout);
+          pending.resolve({ id: "", error: { code: -1, message: "connection closed" } });
         }
         state.pending.clear();
       },
@@ -75,10 +82,15 @@ export async function connect(): Promise<Client> {
   });
 
   return {
-    request(method, params) {
+    request(method, params, timeoutMs = 1000) {
       const id = nextId();
       return new Promise<Response>((resolve) => {
-        state.pending.set(id, resolve);
+        const timeout = setTimeout(() => {
+          if (!state.pending.has(id)) return;
+          state.pending.delete(id);
+          resolve({ id, error: { code: -1, message: `request timed out: ${method}` } });
+        }, timeoutMs);
+        state.pending.set(id, { resolve, timeout });
         socket.write(`${JSON.stringify({ id, method, params })}\n`);
       });
     },

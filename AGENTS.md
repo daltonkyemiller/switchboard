@@ -1,8 +1,17 @@
 # switchboard
 
-A tmux plugin for managing running coding agents (Claude Code, Codex, OpenCode, etc.) across a workspace. Inspired by [herdr](https://github.com/ogulcancelik/herdr), but tmux-native instead of a full standalone TUI — switchboard lives inside your existing tmux session.
+A tmux plugin for managing running coding agents (Claude Code, Codex, OpenCode, etc.) across a workspace. Switchboard lives inside the user's existing tmux session instead of replacing it with a standalone workspace TUI.
 
 This document orients agents working on the switchboard codebase. It describes what we are building, how the pieces fit together, and the conventions to follow.
+
+## Inspiration
+
+Switchboard is directly informed by:
+
+- [herdr](https://github.com/ogulcancelik/herdr), especially the agent-state model, hook contracts, and the idea that coding agents need a workspace-level control surface.
+- [sidekick.nvim](https://github.com/folke/sidekick.nvim), especially the Neovim-native shape for sending code context to agents from the editor.
+
+The difference is the core bet: Switchboard is tmux-native. The sidebar, picker, agent viewers, and popups are tmux participants, not a replacement shell around tmux.
 
 ## What it is
 
@@ -33,26 +42,33 @@ The reference layout (herdr-style):
 
 The sidebar is **just a tmux pane** running our TUI. The user can configure where it lives, how wide it is, or replace it entirely — switchboard does not own the tmux layout, it participates in it.
 
-## Current scope
+## Current shape
 
-We are building in this order. Do not get ahead of it.
+The early daemon, integration, sidebar, and tmux-keybinding layers exist now. Current work should keep strengthening that shape instead of drifting into a separate app.
 
-1. **Daemon + agent state.** Unix socket, JSON-RPC envelopes, in-memory state keyed by `pane_id`, persistence snapshot, and a reaper that drops state for dead panes/sessions.
-2. **Integrations.** `switchboard integration install {claude,codex,opencode}` — installs hook scripts/plugins and patches the agent's config. Hooks report `working | idle | blocked | release`.
-3. **TUI sidebar for the current cwd.** Lists agents whose cwd matches the cwd of the tmux pane hosting the sidebar. Live updates via socket subscription. No spaces yet — spaces are a later layer on top.
-4. **tmux keybindings.** Toggle sidebar, jump to agent, open new agent session.
+Built pieces:
 
-Deferred: spaces, multi-cwd view, "all agents" view, remote agents, non-tmux multiplexers.
+- **Daemon + agent state.** Unix socket, JSON-RPC envelopes, in-memory state, persistence snapshots, and reapers for dead panes or sessions.
+- **Integrations.** `switchboard integration install {claude,codex,opencode}` installs hook scripts or plugins and patches the agent config. Hooks report `working | idle | blocked | release`.
+- **TUI sidebar.** Shows cwd-scoped or all agents, groups all-agent view by cwd, follows attached panes, kills or detaches agents, previews panes, reloads the agent tmux config, and opens a new-agent picker.
+- **Pickers.** File picker with Neovim-context ranking, file icons, directory-aware search, Tree-sitter preview highlighting, user grammar registration, and configurable colors. Agent picker supports attach/create flows from tmux popups.
+- **Agent tmux server.** Agents run in a separate tmux server/socket with a generated minimal config or a user config at `~/.config/switchboard/switchboard.conf`.
+- **Neovim companion plugin.** Reports picker context and exposes send-selection/reference APIs backed by the Switchboard CLI.
+- **tmux plugin.** Toggle sidebar, open pickers, route split/layout/swap keys, pass selected keys through to the agent tmux server, and toggle the last cwd agent.
+
+Still deferred: spaces as a first-class model, remote agents, non-tmux multiplexers, and a standalone TUI. Switchboard augments tmux; it does not compete with it.
 
 ## Design principles
 
 These are load-bearing — violate them and the tool will feel broken.
 
-- **Client routing matters.** Nested tmux clients make naive `switch-client` calls hit the wrong context. Resolve the owner pane before acting; defer focus until after popups exit.
+- **Client routing matters.** Nested tmux clients make naive `switch-client` calls hit the wrong context. Resolve the owner pane before acting. Defer focus until after popups exit.
 - **State per pane.** Agent state is keyed by tmux `pane_id`. Nested/sidekick sessions resolve back to their parent pane.
-- **Hook + heuristic.** Hooks provide semantic status (working/idle/blocked). Process + pane liveness provides existence. Neither alone is sufficient — if the pane is dead, the agent is gone, regardless of last reported state.
+- **Hook + heuristic.** Hooks provide semantic status (working/idle/blocked). Process and pane liveness provide existence. Neither alone is sufficient. If the pane is dead, the agent is gone, regardless of last reported state.
 - **Cleanup is part of the protocol.** A background reaper sweeps stale state for killed panes/sessions. The TUI must never show ghosts.
 - **Hooks never block the agent.** 500ms timeout, fire-and-forget. A dead daemon must not freeze Claude.
+- **Editor context is optional enrichment.** Neovim can improve picker ranking and send exact references, but Switchboard must still work without the companion plugin.
+- **User config wins.** Generated configs are defaults. Users can override agent commands, picker theme/syntax, grammars, keybindings, and the agent tmux server config.
 
 ## Core concepts
 
@@ -77,12 +93,14 @@ The long-running process the hooks talk to. Owns the canonical state. Surfaces i
 
 ## Architecture
 
-Four moving parts:
+Six moving parts:
 
 1. **Hooks** — installed into Claude Code, Codex, OpenCode. Send JSON status events on lifecycle events (`UserPromptSubmit`, `PreToolUse`, `Stop`, `PermissionRequest`, `SessionEnd`).
 2. **Daemon** — listens on a Unix socket. Maintains the in-memory state of all agents and spaces. Persists snapshots so it can rebuild on restart.
-3. **TUI sidebar** (`tui/`) — subscribes to daemon events, renders the spaces + agents list. Sends back user actions (jump to agent, kill session, open new session). Hosted in a tmux pane.
-4. **tmux integration** (`plugin.tmux`) — keybindings, popup pickers, layout helpers, and the script that launches the sidebar pane.
+3. **TUI sidebar** (`cli/src/sidebar/`) — subscribes to daemon events, renders cwd/all agent lists, and sends user actions back through command helpers. Hosted in a tmux pane.
+4. **Pickers** (`cli/src/picker/`) — OpenTUI popups for files and agents. File previews use Markdown rendering where appropriate and Tree-sitter highlighting when a grammar is available.
+5. **tmux integration** (`plugin.tmux`) — keybindings, popup pickers, layout helpers, routed tmux keys, and the script that launches the sidebar pane.
+6. **Neovim plugin** (`nvim/`) — reports editor context and exposes send-selection/reference commands.
 
 ### IPC
 
@@ -124,7 +142,8 @@ Yes, this is the correct location per the [XDG spec](https://specifications.free
 
 - `agents/<pane-id>.json` — per-pane agent state snapshot.
 - `panels/<owner-pane-id>.json` — sidebar/panel selection per owner pane.
-- `spaces.json` — last known spaces snapshot.
+- `nvim-context/*.json` — optional Neovim picker context keyed by cwd.
+- `agent-tmux.generated.conf` — generated minimal tmux config for the agent server when the user has no `switchboard.conf`.
 - `daemon.log` — daemon log.
 
 ### Runtime — `$XDG_RUNTIME_DIR/switchboard/` (default `/run/user/$UID/switchboard/`)
@@ -142,18 +161,20 @@ Single binary. CLI, daemon, and TUI all live in one Bun-compiled executable, dis
 - `switchboard daemon start|stop|status` — long-running socket server.
 - `switchboard sidebar` — launches the TUI in the current pane. This is what `plugin.tmux` runs.
 - `switchboard integration install <claude|codex|opencode>` — installs hooks into agent configs.
-- `switchboard list`, `switchboard jump`, etc. — small CLIs used by tmux bindings.
+- `switchboard agent-picker`, `switchboard new-agent`, `switchboard pick`, `switchboard send`, `switchboard agent-toggle`, `switchboard agent-tmux`, etc. — small CLIs used by tmux bindings, popups, and the Neovim plugin.
 
 ```
 switchboard/
 ├── plugin.tmux            # tmux plugin entrypoint — sourced by TPM
+├── nvim/                  # optional Neovim companion plugin
 ├── cli/                   # the single binary lives here
 │   ├── src/
 │   │   ├── index.tsx      # entry — argv router into commands / daemon / sidebar
 │   │   ├── commands/      # subcommand implementations
 │   │   ├── daemon/        # socket server, state, reaper, persistence
 │   │   ├── sidebar/       # OpenTUI sidebar
-│   │   ├── hooks-assets/  # bundled hook payloads, imported as text
+│   │   ├── picker/        # OpenTUI file picker, previews, syntax, and result model
+│   │   ├── integrations/  # hook installers and integration-specific config patching
 │   │   └── shared/        # protocol types, paths, etc.
 │   └── package.json
 ├── AGENTS.md              # this file
@@ -169,8 +190,9 @@ Subdirs under `src/` are aspirational — create them as the work calls for it. 
 - **Everything is Bun + TypeScript.** One runtime, one binary, shared types end-to-end.
 - **TUI:** [OpenTUI](https://github.com/sst/opentui) (`@opentui/core`, `@opentui/react`). **Always load the `opentui` skill before writing TUI code** — it's vendored under `.agents/skills/opentui` precisely so an agent working here has the API reference at hand.
 - **Daemon:** Bun's built-in `Bun.listen` / `Bun.connect` for Unix sockets. No external server framework.
-- **Hooks:** shell scripts (Claude, Codex) or JS plugin (OpenCode). Bundled into the binary as text and written to disk by `integration install`. Match herdr's ~70-line ceiling per hook.
+- **Hooks:** shell scripts (Claude, Codex) or JS plugin (OpenCode). Bundled into the binary as text and written to disk by `integration install`. Keep hooks small and non-blocking.
 - **tmux glue:** `plugin.tmux` binds keys and calls CLI subcommands. Runtime behavior lives in TypeScript, not standalone shell scripts.
+- **Neovim:** Lua plugin under `nvim/`, with EmmyLua types in the public setup surface.
 
 ## Conventions
 
@@ -215,5 +237,6 @@ Subdirs under `src/` are aspirational — create them as the work calls for it. 
 ## Reference
 
 - herdr: https://github.com/ogulcancelik/herdr — read `INTEGRATIONS.md` and `SOCKET_API.md` for hook contracts worth copying.
+- sidekick.nvim: https://github.com/folke/sidekick.nvim — useful reference for Neovim-to-agent workflows and editor-side context.
 - Claude Code hooks: https://docs.claude.com/en/docs/claude-code/hooks
 - XDG Base Directory spec: https://specifications.freedesktop.org/basedir-spec/latest/

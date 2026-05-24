@@ -2,18 +2,38 @@
 
 Optional Neovim companion plugin for Switchboard.
 
+With lazy.nvim:
+
+```lua
+---@type LazySpec
+return {
+  dir = "~/dev/switchboard/nvim",
+  name = "switchboard.nvim",
+  lazy = false,
+  ---@type SwitchboardConfig
+  opts = {
+    command = "/home/dalton/dev/switchboard/cli/dist/debug/switchboard",
+  },
+}
+```
+
+Or directly:
+
 ```lua
 require("switchboard").setup()
 ```
 
-The plugin writes lightweight editor context to:
+The plugin reports lightweight editor context to the Switchboard daemon. It also
+writes a fallback/cache file under:
 
 ```text
 ~/.local/state/switchboard/nvim-context/
 ```
 
-Switchboard's picker uses that context to rank the current file, alternate
-file, open buffers, and recent files ahead of normal file search results.
+Switchboard's picker asks the daemon for the latest context first, then falls
+back to that file if the daemon is unavailable. It uses the context to rank the
+current file, alternate file, open buffers, and recent files ahead of normal
+file search results. Those files also get an `NV` badge in the picker.
 
 Manual refresh:
 
@@ -21,7 +41,10 @@ Manual refresh:
 :SwitchboardWriteContext
 ```
 
-The state path can be overridden:
+## Configuration
+
+Every option is optional, but `command` should be set when `switchboard` is not
+on Neovim's PATH.
 
 ```lua
 ---@type SwitchboardConfig
@@ -38,7 +61,20 @@ local opts = {
 require("switchboard").setup(opts)
 ```
 
-`send` controls the defaults for every send command:
+Options:
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `enabled` | `true` | Report picker context from Neovim |
+| `debounce_ms` | `150` | Debounce for context writes |
+| `max_open_buffers` | `20` | Maximum open buffers stored in picker context |
+| `max_recent_files` | `50` | Maximum recent files stored in picker context |
+| `state_dir` | `~/.local/state/switchboard/nvim-context` | Fallback/cache directory where picker context JSON is written |
+| `command` | `"switchboard"` | Switchboard CLI executable or absolute path |
+| `send` | see below | Defaults for send commands |
+
+`send` controls the defaults for every send command. Each API call can override
+these:
 
 ```lua
 ---@type SwitchboardConfig
@@ -51,10 +87,7 @@ local opts = {
 }
 ```
 
-Each send call can override those defaults.
-
-If `switchboard` is not on Neovim's PATH, set `command` to the full binary
-path:
+For local development, point `command` at the debug binary:
 
 ```lua
 ---@type SwitchboardConfig
@@ -126,7 +159,9 @@ File references are formatted relative to the target agent's cwd. If you open
 the selector and pick an agent in another repo, Switchboard builds the
 `@path[:line]` reference for that agent.
 
-The plugin also defines:
+## Commands
+
+The plugin defines:
 
 ```vim
 :SwitchboardSendSelection
@@ -138,3 +173,12 @@ The plugin also defines:
 ```
 
 The bang form opens the agent selector before sending.
+
+Useful mappings:
+
+```lua
+vim.keymap.set("v", "<leader>as", "<cmd>SwitchboardSendSelection<cr>")
+vim.keymap.set("v", "<leader>aS", "<cmd>SwitchboardSendSelection!<cr>")
+vim.keymap.set("v", "<leader>ar", "<cmd>SwitchboardSendReference<cr>")
+vim.keymap.set("n", "<leader>af", "<cmd>SwitchboardSendFileReference<cr>")
+```

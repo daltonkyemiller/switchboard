@@ -271,7 +271,8 @@ basename.
 
 ## Neovim Companion
 
-The optional Neovim plugin under `nvim/` writes editor context for the picker:
+The optional Neovim plugin under `nvim/` reports editor context to the daemon
+and writes a fallback/cache file for the picker:
 
 ```lua
 require("switchboard").setup({
@@ -283,15 +284,16 @@ require("switchboard").setup({
 })
 ```
 
-Context is stored under:
+Fallback context files are stored under:
 
 ```text
 ~/.local/state/switchboard/nvim-context/
 ```
 
-The picker uses this to rank the current file, alternate file, open buffers,
-and recent files ahead of normal file search results. The picker still works
-normally when no Neovim context exists.
+The picker asks the daemon for live context first, then falls back to these
+files if the daemon is unavailable. It uses this to rank the current file,
+alternate file, open buffers, and recent files ahead of normal file search
+results. The picker still works normally when no Neovim context exists.
 
 ## `switchboard.conf`
 

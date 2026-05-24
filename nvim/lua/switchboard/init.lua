@@ -10,7 +10,7 @@ local M = {}
 ---@field debounce_ms? integer Debounce for context writes. Defaults to 150.
 ---@field max_open_buffers? integer Maximum open buffers stored in picker context. Defaults to 20.
 ---@field max_recent_files? integer Maximum recent files stored in picker context. Defaults to 50.
----@field state_dir? string Directory where picker context JSON is written.
+---@field state_dir? string Fallback/cache directory where picker context JSON is written.
 ---@field command? string Switchboard CLI executable or absolute path. Defaults to "switchboard".
 ---@field send? SwitchboardSendConfig Selection sending defaults.
 
@@ -40,6 +40,7 @@ local defaults = {
 local config = vim.deepcopy(defaults)
 local group = vim.api.nvim_create_augroup("SwitchboardNvimContext", { clear = true })
 local timer = nil
+local jobs = {}
 
 local function normalize_path(path)
   if not path or path == "" then return nil end
@@ -92,18 +93,14 @@ local function recent_files(cwd)
   return unique_paths(files, config.max_recent_files)
 end
 
-function M.write_context()
-  if not config.enabled then return end
-
+local function context_payload()
   local cwd = normalize_path(vim.uv.cwd())
-  if not cwd then return end
-
-  vim.fn.mkdir(config.state_dir, "p")
+  if not cwd then return nil end
   local current_file = readable_file_in_cwd(vim.api.nvim_buf_get_name(0), cwd)
   local alternate_buf = vim.fn.bufnr("#")
   local alternate_file = alternate_buf > 0 and readable_file_in_cwd(vim.api.nvim_buf_get_name(alternate_buf), cwd) or nil
 
-  local payload = {
+  return {
     version = 1,
     cwd = cwd,
     tmux_pane = vim.env.TMUX_PANE or "",
@@ -113,12 +110,93 @@ function M.write_context()
     open_buffers = open_buffers(cwd),
     recent_files = recent_files(cwd),
   }
+end
 
+local function write_context_file(payload)
+  vim.fn.mkdir(config.state_dir, "p")
   local ok, encoded = pcall(vim.json.encode, payload)
   if not ok then return end
 
-  local path = config.state_dir .. "/" .. vim.fn.sha256(cwd):sub(1, 16) .. ".json"
+  local path = config.state_dir .. "/" .. vim.fn.sha256(payload.cwd):sub(1, 16) .. ".json"
   vim.fn.writefile({ encoded }, path)
+end
+
+local function run_switchboard(args, stdin, on_exit)
+  local command = { config.command }
+  vim.list_extend(command, args)
+
+  if vim.system then
+    local job = nil
+    local ok = pcall(function()
+      job = vim.system(command, { text = true, stdin = stdin }, vim.schedule_wrap(function(result)
+        if job then
+          jobs[job] = nil
+        end
+        on_exit(result.code)
+      end))
+    end)
+    if not ok or not job then
+      on_exit(1)
+      return
+    end
+    jobs[job] = true
+    return
+  end
+
+  local job = vim.fn.jobstart(command, {
+    stdin = "pipe",
+    on_exit = function(_, code)
+      vim.schedule(function()
+        on_exit(code)
+      end)
+    end,
+  })
+  if job <= 0 then
+    on_exit(1)
+    return
+  end
+
+  vim.fn.chansend(job, stdin)
+  vim.fn.chanclose(job, "stdin")
+end
+
+local function run_switchboard_sync(args, stdin)
+  local command = { config.command }
+  vim.list_extend(command, args)
+
+  if vim.system then
+    local ok, job = pcall(vim.system, command, { text = true, stdin = stdin })
+    if not ok then return end
+    job:wait(500)
+    return
+  end
+
+  vim.fn.system(command, stdin)
+end
+
+local function report_context(payload)
+  local ok, encoded = pcall(vim.json.encode, payload)
+  if not ok then return end
+
+  run_switchboard_sync({ "nvim-context", "report" }, encoded)
+end
+
+local function release_context()
+  local payload = context_payload()
+  if not payload then return end
+  local ok, encoded = pcall(vim.json.encode, payload)
+  if not ok then return end
+
+  run_switchboard_sync({ "nvim-context", "release" }, encoded)
+end
+
+function M.write_context()
+  if not config.enabled then return end
+  local payload = context_payload()
+  if not payload then return end
+
+  write_context_file(payload)
+  report_context(payload)
 end
 
 function M.schedule_write()
@@ -165,6 +243,11 @@ function M.setup(opts)
   }, {
     group = group,
     callback = M.schedule_write,
+  })
+
+  vim.api.nvim_create_autocmd("VimLeavePre", {
+    group = group,
+    callback = release_context,
   })
 
   vim.api.nvim_create_user_command("SwitchboardWriteContext", M.write_context, { force = true })

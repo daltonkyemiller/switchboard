@@ -1,4 +1,5 @@
 import type { AgentState, AgentStatus, TmuxServer, Tool } from "./state.ts";
+import type { NvimContextPayload } from "./nvim-context.ts";
 
 export type ReportAgentParams = {
   readonly pane_id: string;
@@ -24,9 +25,23 @@ export type ReleaseAgentParams = {
 
 export type SubscribeParams = Record<string, never>;
 
+export type NvimReportContextParams = NvimContextPayload;
+
+export type NvimContextForCwdParams = {
+  readonly cwd: string;
+};
+
+export type NvimReleaseContextParams = {
+  readonly cwd: string;
+  readonly tmux_pane?: string;
+};
+
 export type Request =
   | { readonly id: string; readonly method: "pane.report_agent"; readonly params: ReportAgentParams }
   | { readonly id: string; readonly method: "pane.release_agent"; readonly params: ReleaseAgentParams }
+  | { readonly id: string; readonly method: "nvim.report_context"; readonly params: NvimReportContextParams }
+  | { readonly id: string; readonly method: "nvim.release_context"; readonly params: NvimReleaseContextParams }
+  | { readonly id: string; readonly method: "nvim.context_for_cwd"; readonly params: NvimContextForCwdParams }
   | { readonly id: string; readonly method: "events.subscribe"; readonly params: SubscribeParams }
   | { readonly id: string; readonly method: "state.list"; readonly params: SubscribeParams };
 

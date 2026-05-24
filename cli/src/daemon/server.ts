@@ -3,8 +3,12 @@ import { dirname } from "node:path";
 import type { Socket } from "bun";
 import { paths } from "../shared/paths.ts";
 import { cleanupAgentTmuxSocket } from "../shared/tmux.ts";
+import { normalizeNvimCwd } from "../shared/nvim-context.ts";
 import type {
   Event,
+  NvimContextForCwdParams,
+  NvimReleaseContextParams,
+  NvimReportContextParams,
   ReleaseAgentParams,
   ReportAgentParams,
   Request,
@@ -77,6 +81,25 @@ function handleRelease(params: ReleaseAgentParams): void {
   store.remove(params.pane_id);
 }
 
+async function handleNvimReport(params: NvimReportContextParams): Promise<void> {
+  const cwd = await normalizeNvimCwd(params.cwd);
+  store.upsertNvimContext({
+    ...params,
+    cwd,
+    updated_at: params.updated_at ?? Date.now(),
+  });
+}
+
+async function handleNvimRelease(params: NvimReleaseContextParams): Promise<void> {
+  const cwd = await normalizeNvimCwd(params.cwd);
+  store.removeNvimContext(cwd, params.tmux_pane);
+}
+
+async function handleNvimContextForCwd(params: NvimContextForCwdParams): Promise<unknown> {
+  const cwd = await normalizeNvimCwd(params.cwd);
+  return { context: store.nvimContextForCwd(cwd) };
+}
+
 async function dispatch(socket: Socket<ConnState>, request: Request): Promise<void> {
   switch (request.method) {
     case "pane.report_agent":
@@ -86,6 +109,17 @@ async function dispatch(socket: Socket<ConnState>, request: Request): Promise<vo
     case "pane.release_agent":
       handleRelease(request.params);
       send(socket, ok(request.id, { accepted: true }));
+      return;
+    case "nvim.report_context":
+      await handleNvimReport(request.params);
+      send(socket, ok(request.id, { accepted: true }));
+      return;
+    case "nvim.release_context":
+      await handleNvimRelease(request.params);
+      send(socket, ok(request.id, { accepted: true }));
+      return;
+    case "nvim.context_for_cwd":
+      send(socket, ok(request.id, await handleNvimContextForCwd(request.params)));
       return;
     case "state.list":
       send(socket, ok(request.id, { agents: store.snapshot() }));
@@ -101,6 +135,10 @@ async function dispatch(socket: Socket<ConnState>, request: Request): Promise<vo
       send(socket, ok(request.id, { subscribed: true }));
       return;
     }
+    default:
+      const unknownRequest = request as unknown as { readonly id: string; readonly method: string };
+      send(socket, fail(unknownRequest.id, `unknown method: ${unknownRequest.method}`));
+      return;
   }
 }
 
