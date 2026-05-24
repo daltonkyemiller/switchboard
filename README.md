@@ -2,6 +2,8 @@
 
 A tmux-native sidebar for managing running coding agents across a workspace.
 
+![Switchboard tmux workspace overview](assets/switchboard-overview.png)
+
 ## Configuration
 
 Switchboard configuration is documented in
