@@ -83,9 +83,12 @@ startup so Switchboard has current editor context before the picker opens:
 ```lua
 ---@type LazySpec
 return {
-  dir = "~/dev/switchboard/nvim",
+  "daltonkyemiller/switchboard",
   name = "switchboard.nvim",
   lazy = false,
+  init = function(plugin)
+    vim.opt.rtp:append(plugin.dir .. "/nvim")
+  end,
   ---@type SwitchboardConfig
   opts = {
     command = "switchboard",

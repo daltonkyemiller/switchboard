@@ -7,6 +7,24 @@ With lazy.nvim:
 ```lua
 ---@type LazySpec
 return {
+  "daltonkyemiller/switchboard",
+  name = "switchboard.nvim",
+  lazy = false,
+  init = function(plugin)
+    vim.opt.rtp:append(plugin.dir .. "/nvim")
+  end,
+  ---@type SwitchboardConfig
+  opts = {
+    command = "switchboard",
+  },
+}
+```
+
+For local development, use a local `dir` instead:
+
+```lua
+---@type LazySpec
+return {
   dir = "~/dev/switchboard/nvim",
   name = "switchboard.nvim",
   lazy = false,
