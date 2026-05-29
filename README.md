@@ -58,6 +58,46 @@ Switchboard releases ship Linux x64 and Linux arm64 tarballs. Each tarball
 contains the compiled `switchboard` binary, the tmux plugin entrypoint, the
 README, and configuration docs.
 
+Install the latest release:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/daltonkyemiller/switchboard/main/scripts/install.sh | bash
+```
+
+The installer downloads the right archive for your machine, installs the binary
+and native OpenTUI library under `/usr/local`, and installs `plugin.tmux` to
+`~/.tmux/plugins/switchboard`.
+
+You can override the install locations or version:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/daltonkyemiller/switchboard/main/scripts/install.sh |
+  PREFIX="$HOME/.local" TMUX_PLUGIN_DIR="$HOME/.tmux/plugins/switchboard" VERSION="v0.1.0" bash
+```
+
+Then source it from your tmux config:
+
+```tmux
+run-shell ~/.tmux/plugins/switchboard/plugin.tmux
+```
+
+Reload tmux and start the daemon:
+
+```sh
+tmux source-file ~/.tmux.conf
+switchboard daemon start
+```
+
+Install the agent hooks you use:
+
+```sh
+switchboard integration install claude
+switchboard integration install codex
+switchboard integration install opencode
+```
+
+### Manual Installation
+
 Choose the archive for your machine:
 
 ```sh
