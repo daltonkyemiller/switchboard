@@ -52,6 +52,68 @@ tmux sessions do not fight your main tmux layout.
 
 ![Switchboard agent attach and create picker](assets/agent-attach-picker.png)
 
+## Installation
+
+Switchboard releases ship Linux x64 and Linux arm64 tarballs. Each tarball
+contains the compiled `switchboard` binary, the tmux plugin entrypoint, the
+README, and configuration docs.
+
+Choose the archive for your machine:
+
+```sh
+arch="$(uname -m)"
+case "$arch" in
+  x86_64) target="linux-x64" ;;
+  aarch64 | arm64) target="linux-arm64" ;;
+  *) echo "Unsupported architecture: $arch" >&2; exit 1 ;;
+esac
+
+curl -L "https://github.com/daltonkyemiller/switchboard/releases/latest/download/switchboard-${target}.tar.gz" -o "switchboard-${target}.tar.gz"
+tar -xzf "switchboard-${target}.tar.gz"
+```
+
+Install the binary somewhere on your `PATH`:
+
+```sh
+sudo install -m 0755 "switchboard-${target}/bin/switchboard" /usr/local/bin/switchboard
+```
+
+Install the tmux plugin from the release archive:
+
+```sh
+mkdir -p ~/.tmux/plugins/switchboard
+cp "switchboard-${target}/plugin.tmux" ~/.tmux/plugins/switchboard/plugin.tmux
+```
+
+Then source it from your tmux config:
+
+```tmux
+run-shell ~/.tmux/plugins/switchboard/plugin.tmux
+```
+
+Reload tmux and start the daemon:
+
+```sh
+tmux source-file ~/.tmux.conf
+switchboard daemon start
+```
+
+Install the agent hooks you use:
+
+```sh
+switchboard integration install claude
+switchboard integration install codex
+switchboard integration install opencode
+```
+
+If you use TPM from source instead of release tarballs, add the plugin repo to
+your tmux config and make sure the compiled `switchboard` binary is still on
+your `PATH`:
+
+```tmux
+set -g @plugin 'daltonkyemiller/switchboard'
+```
+
 ## Configuration
 
 Switchboard configuration is documented in
@@ -107,3 +169,33 @@ The picker asks the daemon for current file, alternate file, open buffers, and
 recent files, then falls back to a recent cache file if the daemon is
 unavailable. See [`nvim/README.md`](nvim/README.md) for the send-selection and
 file-reference APIs.
+
+## Releases
+
+Releases are generated from conventional commits on `main` with
+semantic-release. The release workflow builds and uploads:
+
+- `switchboard-linux-x64.tar.gz`
+- `switchboard-linux-arm64.tar.gz`
+
+Each archive includes:
+
+- `bin/switchboard`
+- `plugin.tmux`
+- `README.md`
+- `docs/configuration.md`
+
+To validate locally:
+
+```sh
+cd cli
+bun install
+bun run typecheck
+bun run build
+case "$(uname -m)" in
+  x86_64) target="linux-x64" ;;
+  aarch64 | arm64) target="linux-arm64" ;;
+  *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+esac
+bun run package:release "$target"
+```

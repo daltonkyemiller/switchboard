@@ -5,7 +5,10 @@
   "private": true,
   "scripts": {
     "dev": "bun run --watch src/index.tsx",
-    "build:debug": "bun run scripts/build.ts"
+    "typecheck": "tsc --noEmit",
+    "build": "bun run scripts/build.ts",
+    "build:debug": "bun run scripts/build.ts",
+    "package:release": "bun run scripts/package-release.ts"
   },
   "devDependencies": {
     "@types/bun": "latest"
