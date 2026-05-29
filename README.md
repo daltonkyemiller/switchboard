@@ -76,6 +76,8 @@ Install the binary somewhere on your `PATH`:
 
 ```sh
 sudo install -m 0755 "switchboard-${target}/bin/switchboard" /usr/local/bin/switchboard
+sudo install -d /usr/local/lib/switchboard
+sudo install -m 0644 "switchboard-${target}/lib/switchboard/libopentui.so" /usr/local/lib/switchboard/libopentui.so
 ```
 
 Install the tmux plugin from the release archive:
@@ -181,6 +183,7 @@ semantic-release. The release workflow builds and uploads:
 Each archive includes:
 
 - `bin/switchboard`
+- `lib/switchboard/libopentui.so`
 - `plugin.tmux`
 - `README.md`
 - `docs/configuration.md`

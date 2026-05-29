@@ -70,6 +70,7 @@ for (const target of selectedTargets) {
   const packageDir = resolve(releaseDir, packageName);
   const binaryPath = resolve(packageDir, "bin/switchboard");
   const archivePath = resolve(releaseDir, `${packageName}.tar.gz`);
+  const nativeLibraryPath = resolve(cliDir, "node_modules", nativePackageName(), nativeLibraryName());
 
   rmSync(packageDir, { force: true, recursive: true });
   rmSync(archivePath, { force: true });
@@ -96,6 +97,8 @@ for (const target of selectedTargets) {
   }
 
   chmodSync(binaryPath, 0o755);
+  mkdirSync(resolve(packageDir, "lib/switchboard"), { recursive: true });
+  cpSync(nativeLibraryPath, resolve(packageDir, "lib/switchboard", nativeLibraryName()));
   cpSync(resolve(repoDir, "plugin.tmux"), resolve(packageDir, "plugin.tmux"));
   cpSync(resolve(repoDir, "README.md"), resolve(packageDir, "README.md"));
   mkdirSync(resolve(packageDir, "docs"), { recursive: true });
@@ -112,4 +115,14 @@ for (const target of selectedTargets) {
   }
 
   console.log(`Created ${basename(archivePath)}`);
+}
+
+function nativePackageName(): string {
+  return `@opentui/core-${process.platform}-${process.arch}`;
+}
+
+function nativeLibraryName(): string {
+  if (process.platform === "darwin") return "libopentui.dylib";
+  if (process.platform === "win32") return "libopentui.dll";
+  return "libopentui.so";
 }
