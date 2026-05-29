@@ -96,6 +96,16 @@ switchboard integration install codex
 switchboard integration install opencode
 ```
 
+Uninstall the release files when you want to remove Switchboard:
+
+```sh
+switchboard uninstall
+```
+
+This removes the installed binary, the bundled OpenTUI native library, and the
+release-installed tmux plugin file. It leaves your Switchboard config and state
+directories in place.
+
 ### Manual Installation
 
 Choose the archive for your machine:

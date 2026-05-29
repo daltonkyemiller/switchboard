@@ -16,6 +16,7 @@ import { runSidebar } from "./commands/sidebar.tsx";
 import { runAgentPickerPopup, runNewAgentPopup, runPickPopup } from "./commands/tmux-popup.ts";
 import { runRouter } from "./commands/tmux-router.ts";
 import { runSidebarEnforceWidth, runSidebarToggle } from "./commands/tmux-sidebar.ts";
+import { runUninstall } from "./commands/uninstall.ts";
 import { runWatch } from "./commands/watch.ts";
 
 function printUsage(): void {
@@ -45,6 +46,7 @@ usage:
   switchboard list [--cwd PATH]                     list tracked agents
   switchboard watch                                 stream agent events
   switchboard integration install <claude|codex|opencode>   install agent hook
+  switchboard uninstall [--prefix PATH] [--tmux-plugin-dir PATH] [--yes]
   switchboard report <tool> <status>                debug: report state for $TMUX_PANE
   switchboard release                               debug: release $TMUX_PANE`);
 }
@@ -70,6 +72,9 @@ async function main(): Promise<void> {
       return;
     case "integration":
       await runIntegration(rest);
+      return;
+    case "uninstall":
+      await runUninstall(rest);
       return;
     case "grammar":
       await runGrammar(rest);
