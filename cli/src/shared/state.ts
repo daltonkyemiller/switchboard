@@ -1,4 +1,4 @@
-export type Tool = "claude" | "codex" | "opencode";
+export type Tool = "claude" | "codex" | "opencode" | "pi";
 
 export type AgentStatus = "working" | "idle" | "blocked" | "unknown";
 

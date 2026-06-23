@@ -3,10 +3,11 @@ import { join } from "node:path";
 import { CLAUDE_HOOK_FILENAME } from "../integrations/hooks/claude.ts";
 import { CODEX_HOOK_FILENAME } from "../integrations/hooks/codex.ts";
 import { OPENCODE_PLUGIN_FILENAME } from "../integrations/hooks/opencode.ts";
+import { PI_EXTENSION_FILENAME } from "../integrations/hooks/pi.ts";
 import { paths } from "./paths.ts";
 import type { Tool } from "./state.ts";
 
-const TOOLS: readonly Tool[] = ["claude", "codex", "opencode"];
+const TOOLS: readonly Tool[] = ["claude", "codex", "opencode", "pi"];
 
 type AgentConfig = {
   readonly command: string | null;
@@ -26,6 +27,7 @@ const DEFAULT_AGENT_CONFIG: Record<Tool, AgentConfig> = {
   claude: { command: "claude", args: [] },
   codex: { command: "codex", args: [] },
   opencode: { command: "opencode", args: [] },
+  pi: { command: "pi", args: [] },
 };
 
 const home = process.env["HOME"];
@@ -33,10 +35,13 @@ if (!home) {
   throw new Error("HOME is not set");
 }
 
+const piAgentDir = process.env["PI_CODING_AGENT_DIR"] ?? join(home, ".pi", "agent");
+
 const INTEGRATION_FILES: Record<Tool, string> = {
   claude: join(home, ".claude", "hooks", CLAUDE_HOOK_FILENAME),
   codex: join(home, ".codex", CODEX_HOOK_FILENAME),
   opencode: join(home, ".config", "opencode", "plugins", OPENCODE_PLUGIN_FILENAME),
+  pi: join(piAgentDir, "extensions", PI_EXTENSION_FILENAME),
 };
 
 async function fileExists(path: string): Promise<boolean> {

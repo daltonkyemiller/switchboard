@@ -13,7 +13,7 @@ type PaneProcess = {
   readonly command: string;
 };
 
-const AGENT_COMMANDS = new Set(["claude", "codex", "opencode"]);
+const AGENT_COMMANDS = new Set(["claude", "codex", "opencode", "pi"]);
 
 export async function paneValue(pane: string, format: string): Promise<string> {
   const result = await tmux(["display-message", "-t", pane, "-p", format]);

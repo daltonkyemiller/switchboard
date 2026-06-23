@@ -1,10 +1,10 @@
 import { Result } from "@praha/byethrow";
-import { installClaude, installCodex, installOpencode } from "../integrations/install.ts";
+import { installClaude, installCodex, installOpencode, installPi } from "../integrations/install.ts";
 
-type Tool = "claude" | "codex" | "opencode";
+type Tool = "claude" | "codex" | "opencode" | "pi";
 
 function isTool(value: string): value is Tool {
-  return value === "claude" || value === "codex" || value === "opencode";
+  return value === "claude" || value === "codex" || value === "opencode" || value === "pi";
 }
 
 async function runInstall(tool: Tool): Promise<void> {
@@ -42,17 +42,27 @@ async function runInstall(tool: Tool): Promise<void> {
       console.log(`installed opencode integration plugin to ${pluginPath}`);
       return;
     }
+    case "pi": {
+      const result = await installPi();
+      if (Result.isFailure(result)) {
+        console.error(`failed: ${result.error.message}`);
+        process.exit(1);
+      }
+      const { extensionPath } = result.value;
+      console.log(`installed pi integration extension to ${extensionPath}`);
+      return;
+    }
   }
 }
 
 export async function runIntegration(args: readonly string[]): Promise<void> {
   const [sub, target] = args;
   if (sub !== "install") {
-    console.error("usage: switchboard integration install <claude|codex|opencode>");
+    console.error("usage: switchboard integration install <claude|codex|opencode|pi>");
     process.exit(1);
   }
   if (!target || !isTool(target)) {
-    console.error("usage: switchboard integration install <claude|codex|opencode>");
+    console.error("usage: switchboard integration install <claude|codex|opencode|pi>");
     process.exit(1);
   }
   await runInstall(target);

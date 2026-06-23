@@ -4,10 +4,10 @@ A tmux-native sidebar for managing running coding agents across a workspace.
 
 ![Switchboard tmux workspace overview](assets/switchboard-overview.png)
 
-Switchboard keeps Claude Code, Codex, OpenCode, and other agent sessions inside
-your existing tmux workflow. It gives you a sidebar for the running agents,
-popup pickers for files and sessions, and enough routing glue that nested agent
-tmux sessions do not fight your main tmux layout.
+Switchboard keeps Claude Code, Codex, OpenCode, Pi, and other agent sessions
+inside your existing tmux workflow. It gives you a sidebar for the running
+agents, popup pickers for files and sessions, and enough routing glue that
+nested agent tmux sessions do not fight your main tmux layout.
 
 ## Features
 
@@ -18,7 +18,7 @@ tmux sessions do not fight your main tmux layout.
   attach an agent into the current window, preview a session in a popup, detach
   viewers, or kill stale agent sessions from the sidebar.
 - **Integrated agent picker.** Open a tmux popup that can create a new Claude,
-  Codex, or OpenCode session, or attach to an existing one. It starts scoped to
+  Codex, OpenCode, or Pi session, or attach to an existing one. It starts scoped to
   the current cwd and has an all-agents tab.
 - **Toggle-or-create workflow.** Bind one key to show/hide the last used agent
   for the current cwd. If none exists, Switchboard opens the agent picker.
@@ -94,6 +94,7 @@ Install the agent hooks you use:
 switchboard integration install claude
 switchboard integration install codex
 switchboard integration install opencode
+switchboard integration install pi
 ```
 
 Uninstall the release files when you want to remove Switchboard:
@@ -156,6 +157,7 @@ Install the agent hooks you use:
 switchboard integration install claude
 switchboard integration install codex
 switchboard integration install opencode
+switchboard integration install pi
 ```
 
 If you use TPM from source instead of release tarballs, add the plugin repo to

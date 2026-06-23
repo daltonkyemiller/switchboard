@@ -7,7 +7,7 @@ import { fail, fromTmux, type CliResultAsync, unwrapOrExit } from "../shared/res
 import { agentTmux, shellQuote, switchboardCommand } from "../shared/tmux.ts";
 import type { Tool } from "../shared/state.ts";
 
-const TOOLS = new Set<Tool>(["claude", "codex", "opencode"]);
+const TOOLS = new Set<Tool>(["claude", "codex", "opencode", "pi"]);
 
 export function isTool(value: string): value is Tool {
   return TOOLS.has(value as Tool);
@@ -28,7 +28,7 @@ function generateSessionName(tool: Tool): string {
 
 async function buildCommandLine(tool: Tool, args: readonly string[]): Promise<string> {
   const launcher = await resolveAgentLauncher(tool);
-  return [launcher.command, ...launcher.args.map(shellQuote), ...args.map(shellQuote)].join(" ");
+  return [shellQuote(launcher.command), ...launcher.args.map(shellQuote), ...args.map(shellQuote)].join(" ");
 }
 
 export type CreateAgentOptions = {
@@ -165,7 +165,7 @@ export async function runNew(args: readonly string[]): Promise<void> {
   const [tool, ...toolArgs] = remaining;
 
   if (!tool || !isTool(tool)) {
-    console.error("usage: switchboard new <claude|codex|opencode> [--detach] [args...]");
+    console.error("usage: switchboard new <claude|codex|opencode|pi> [--detach] [args...]");
     process.exit(1);
   }
 

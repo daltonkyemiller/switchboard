@@ -6,6 +6,7 @@ import { ensureCodexHooksEnabled } from "./codex-toml.ts";
 import { CLAUDE_HOOK_FILENAME, CLAUDE_HOOK_SCRIPT } from "./hooks/claude.ts";
 import { CODEX_HOOK_FILENAME, CODEX_HOOK_SCRIPT } from "./hooks/codex.ts";
 import { OPENCODE_PLUGIN_FILENAME, OPENCODE_PLUGIN_SCRIPT } from "./hooks/opencode.ts";
+import { PI_EXTENSION_FILENAME, PI_EXTENSION_SCRIPT } from "./hooks/pi.ts";
 import { ensureCommandHook, shellSingleQuote } from "./settings-patch.ts";
 
 const home = process.env["HOME"];
@@ -21,6 +22,13 @@ async function isDirectory(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function commandExists(command: string): boolean {
+  const result = Bun.spawnSync({
+    cmd: ["sh", "-lc", `command -v ${shellSingleQuote(command)} >/dev/null 2>&1`],
+  });
+  return result.success;
 }
 
 async function readJson(path: string): Promise<Record<string, unknown>> {
@@ -167,5 +175,31 @@ export function installOpencode(): CliResultAsync<OpencodeInstallResult> {
   return Result.try({
     try: installOpencodeImpl,
     catch: (error) => cliError("failed to install opencode integration", error),
+  });
+}
+
+export type PiInstallResult = {
+  readonly extensionPath: string;
+};
+
+async function installPiImpl(): Promise<PiInstallResult> {
+  const piDir = join(homeDir(), ".pi");
+  if (!(await isDirectory(piDir)) && !commandExists("pi")) {
+    throw new Error(`pi directory not found at ${piDir}. install pi first`);
+  }
+
+  const agentDir = process.env["PI_CODING_AGENT_DIR"] ?? join(piDir, "agent");
+  const extensionsDir = join(agentDir, "extensions");
+  await mkdir(extensionsDir, { recursive: true });
+
+  const extensionPath = join(extensionsDir, PI_EXTENSION_FILENAME);
+  await writeFile(extensionPath, PI_EXTENSION_SCRIPT);
+  return { extensionPath };
+}
+
+export function installPi(): CliResultAsync<PiInstallResult> {
+  return Result.try({
+    try: installPiImpl,
+    catch: (error) => cliError("failed to install pi integration", error),
   });
 }

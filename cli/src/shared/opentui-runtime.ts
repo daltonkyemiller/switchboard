@@ -22,6 +22,7 @@ async function findNativeLibraryPath(): Promise<string> {
   const candidates = [
     process.env.SWITCHBOARD_OPENTUI_LIB,
     join(dirname(process.execPath), "../lib/switchboard", libName),
+    join(dirname(process.execPath), "../../node_modules", nativePackageName(), libName),
     resolve(moduleDir, "../../node_modules", nativePackageName(), libName),
   ].filter((path) => path !== undefined);
 

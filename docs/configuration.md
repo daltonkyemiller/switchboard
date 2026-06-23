@@ -25,6 +25,10 @@ args = []
 command = "opencode"
 args = []
 
+[agents.pi]
+command = "pi"
+args = []
+
 [picker]
 nerd_font_icons = true
 
@@ -103,6 +107,7 @@ Supported agent sections:
 | `[agents.claude]` | `claude` |
 | `[agents.codex]` | `codex` |
 | `[agents.opencode]` | `opencode` |
+| `[agents.pi]` | `pi` |
 
 The standalone launcher is available as:
 

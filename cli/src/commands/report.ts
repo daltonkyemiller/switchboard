@@ -1,7 +1,7 @@
 import { connect } from "../shared/client.ts";
 import type { AgentStatus, Tool } from "../shared/state.ts";
 
-const TOOLS = new Set<Tool>(["claude", "codex", "opencode"]);
+const TOOLS = new Set<Tool>(["claude", "codex", "opencode", "pi"]);
 const STATUSES = new Set<AgentStatus>(["working", "idle", "blocked", "unknown"]);
 
 function isTool(value: string): value is Tool {
@@ -15,7 +15,7 @@ function isStatus(value: string): value is AgentStatus {
 export async function runReport(args: readonly string[]): Promise<void> {
   const [tool, status] = args;
   if (!tool || !status || !isTool(tool) || !isStatus(status)) {
-    console.error("usage: switchboard report <claude|codex|opencode> <working|idle|blocked|unknown>");
+    console.error("usage: switchboard report <claude|codex|opencode|pi> <working|idle|blocked|unknown>");
     process.exit(1);
   }
 

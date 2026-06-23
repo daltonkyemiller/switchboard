@@ -25,7 +25,7 @@ function printUsage(): void {
 usage:
   switchboard daemon                                run the background server
   switchboard sidebar [--cwd PATH | --all]          tui sidebar (default: cwd of this pane)
-  switchboard new <tool> [--detach] [args...]       spawn agent in a detached tmux session
+  switchboard new <tool> [--detach] [args...]       spawn claude, codex, opencode, or pi
   switchboard new-agent [--cwd PATH]                picker for spawning installed agents
   switchboard agent-picker [--cwd PATH]             picker for attaching or creating agents
   switchboard agent-picker-popup [pane]             tmux popup wrapper for agent-picker
@@ -45,7 +45,7 @@ usage:
   switchboard grammar list|add                      manage picker Tree-sitter grammars
   switchboard list [--cwd PATH]                     list tracked agents
   switchboard watch                                 stream agent events
-  switchboard integration install <claude|codex|opencode>   install agent hook
+  switchboard integration install <claude|codex|opencode|pi>   install agent integration
   switchboard uninstall [--prefix PATH] [--tmux-plugin-dir PATH] [--yes]
   switchboard report <tool> <status>                debug: report state for $TMUX_PANE
   switchboard release                               debug: release $TMUX_PANE`);

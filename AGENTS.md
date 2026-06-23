@@ -1,6 +1,6 @@
 # switchboard
 
-A tmux plugin for managing running coding agents (Claude Code, Codex, OpenCode, etc.) across a workspace. Switchboard lives inside the user's existing tmux session instead of replacing it with a standalone workspace TUI.
+A tmux plugin for managing running coding agents (Claude Code, Codex, OpenCode, Pi, etc.) across a workspace. Switchboard lives inside the user's existing tmux session instead of replacing it with a standalone workspace TUI.
 
 This document orients agents working on the switchboard codebase. It describes what we are building, how the pieces fit together, and the conventions to follow.
 
@@ -49,7 +49,7 @@ The early daemon, integration, sidebar, and tmux-keybinding layers exist now. Cu
 Built pieces:
 
 - **Daemon + agent state.** Unix socket, JSON-RPC envelopes, in-memory state, persistence snapshots, and reapers for dead panes or sessions.
-- **Integrations.** `switchboard integration install {claude,codex,opencode}` installs hook scripts or plugins and patches the agent config. Hooks report `working | idle | blocked | release`.
+- **Integrations.** `switchboard integration install {claude,codex,opencode,pi}` installs hook scripts, plugins, or extensions and patches the agent config where needed. Hooks report `working | idle | blocked | release`.
 - **TUI sidebar.** Shows cwd-scoped or all agents, groups all-agent view by cwd, follows attached panes, kills or detaches agents, previews panes, reloads the agent tmux config, and opens a new-agent picker.
 - **Pickers.** File picker with Neovim-context ranking, file icons, directory-aware search, Tree-sitter preview highlighting, user grammar registration, and configurable colors. Agent picker supports attach/create flows from tmux popups.
 - **Agent tmux server.** Agents run in a separate tmux server/socket with a generated minimal config or a user config at `~/.config/switchboard/switchboard.conf`.
@@ -78,7 +78,7 @@ A directory the user works in. Usually a git repo, sometimes a worktree. Spaces 
 ### Agent
 A running instance of a coding agent in a tmux pane. Identified by tmux `pane_id` plus the underlying agent process. Each agent has:
 
-- `tool` — `claude`, `codex`, `opencode`, etc.
+- `tool` — `claude`, `codex`, `opencode`, `pi`, etc.
 - `status` — `working`, `idle`, `blocked`, `unknown`.
 - `cwd` — resolved to a space.
 - `prompt_preview` — short snippet of the last user prompt.
@@ -95,7 +95,7 @@ The long-running process the hooks talk to. Owns the canonical state. Surfaces i
 
 Six moving parts:
 
-1. **Hooks** — installed into Claude Code, Codex, OpenCode. Send JSON status events on lifecycle events (`UserPromptSubmit`, `PreToolUse`, `Stop`, `PermissionRequest`, `SessionEnd`).
+1. **Hooks** — installed into Claude Code, Codex, OpenCode, and Pi. Send JSON status events on lifecycle events (`UserPromptSubmit`, `PreToolUse`, `Stop`, `PermissionRequest`, `SessionEnd`, Pi extension events, etc.).
 2. **Daemon** — listens on a Unix socket. Maintains the in-memory state of all agents and spaces. Persists snapshots so it can rebuild on restart.
 3. **TUI sidebar** (`cli/src/sidebar/`) — subscribes to daemon events, renders cwd/all agent lists, and sends user actions back through command helpers. Hosted in a tmux pane.
 4. **Pickers** (`cli/src/picker/`) — OpenTUI popups for files and agents. File previews use Markdown rendering where appropriate and Tree-sitter highlighting when a grammar is available.
@@ -160,7 +160,7 @@ Single binary. CLI, daemon, and TUI all live in one Bun-compiled executable, dis
 
 - `switchboard daemon start|stop|status` — long-running socket server.
 - `switchboard sidebar` — launches the TUI in the current pane. This is what `plugin.tmux` runs.
-- `switchboard integration install <claude|codex|opencode>` — installs hooks into agent configs.
+- `switchboard integration install <claude|codex|opencode|pi>` — installs hooks, plugins, or extensions into the matching agent config location.
 - `switchboard agent-picker`, `switchboard new-agent`, `switchboard pick`, `switchboard send`, `switchboard agent-toggle`, `switchboard agent-tmux`, etc. — small CLIs used by tmux bindings, popups, and the Neovim plugin.
 
 ```
@@ -190,7 +190,7 @@ Subdirs under `src/` are aspirational — create them as the work calls for it. 
 - **Everything is Bun + TypeScript.** One runtime, one binary, shared types end-to-end.
 - **TUI:** [OpenTUI](https://github.com/sst/opentui) (`@opentui/core`, `@opentui/react`). **Always load the `opentui` skill before writing TUI code** — it's vendored under `.agents/skills/opentui` precisely so an agent working here has the API reference at hand.
 - **Daemon:** Bun's built-in `Bun.listen` / `Bun.connect` for Unix sockets. No external server framework.
-- **Hooks:** shell scripts (Claude, Codex) or JS plugin (OpenCode). Bundled into the binary as text and written to disk by `integration install`. Keep hooks small and non-blocking.
+- **Hooks:** shell scripts (Claude, Codex), JS plugin (OpenCode), or TypeScript extension (Pi). Bundled into the binary as text and written to disk by `integration install`. Keep hooks small and non-blocking.
 - **tmux glue:** `plugin.tmux` binds keys and calls CLI subcommands. Runtime behavior lives in TypeScript, not standalone shell scripts.
 - **Neovim:** Lua plugin under `nvim/`, with EmmyLua types in the public setup surface.
 
@@ -225,7 +225,7 @@ Subdirs under `src/` are aspirational — create them as the work calls for it. 
 ### Naming
 - kebab-case filenames.
 - Status values are lowercase: `working`, `idle`, `blocked`, `unknown`.
-- Tool names are lowercase: `claude`, `codex`, `opencode`.
+- Tool names are lowercase: `claude`, `codex`, `opencode`, `pi`.
 
 ## Out of scope (for now)
 
